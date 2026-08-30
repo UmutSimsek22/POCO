@@ -55,7 +55,7 @@ export const StoreLoginScreen: React.FC = () => {
           <View style={styles.iconCircle}>
             <Ionicons name="storefront" color="#10B981" size={48} />
           </View>
-          <Text style={styles.appTitle}>PoCo</Text>
+          <Text style={styles.appTitle}>POCO</Text>
           <Text style={styles.appSubtitle}>Mobil Barkod & Kasa Sistemi</Text>
         </View>
 

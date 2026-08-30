@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "PoCo",
+    "name": "POCO",
     "slug": "poco-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0B0F19"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -17,13 +17,13 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "PoCo barkod okuma ve ürün fotoğrafı çekmek için kameranıza erişim ister."
+        "NSCameraUsageDescription": "POCO barkod okuma ve ürün fotoğrafı çekmek için kameranıza erişim ister."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "android.permission.CAMERA"
@@ -37,7 +37,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "PoCo barkod taramak için kamerayı kullanır."
+          "cameraPermission": "POCO barkod taramak için kamerayı kullanır."
         }
       ],
       [

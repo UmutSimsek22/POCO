@@ -70,26 +70,27 @@ jobs:
       - name: 🔑 Gradle Wrapper İzni Ver
         run: chmod +x android/gradlew
 
-      - name: 🔨 Android APK Derle (Gradle)
+      - name: 🔨 Standalone Android APK Derle (Release)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: 📋 APK Dosyasını Hazırla
         run: |
           mkdir -p build_output
-          cp android/app/build/outputs/apk/debug/app-debug.apk build_output/PoCo-v1.0.apk
+          cp android/app/build/outputs/apk/release/app-release.apk build_output/POCO-v1.0.apk
 
       - name: 🚀 GitHub Release İle APK Yayınla
         uses: softprops/action-gh-release@v2
         with:
-          files: build_output/PoCo-v1.0.apk
+          files: build_output/POCO-v1.0.apk
           tag_name: v1.0.0
-          name: PoCo Mobil Barkod & Kasa APK (v1.0.0)
+          name: POCO Mobil Barkod & Kasa APK (v1.0.0)
           body: |
-            🎉 **PoCo Android APK İndirme Bağlantısı**
+            🎉 **POCO Standalone Android APK İndirme Bağlantısı**
 
-            - **PoCo-v1.0.apk** dosyasını Android telefonunuza indirip doğrudan kurabilirsiniz.
-            - Bu sürüm Supabase bulut veritabanına bağlıdır, çoklu cihaz realtime senkronizasyonludur ve offline çalışabilir.
+            - **POCO-v1.0.apk** dosyasını Android telefonunuza indirip doğrudan kurabilirsiniz.
+            - Bu sürüm bağımsız (Release) olarak derlenmiştir, geliştirici sunucusuna ihtiyaç duymaz.
+            - Supabase bulut veritabanı, çoklu cihaz realtime senkronizasyonu ve offline çalışma desteği mevcuttur.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

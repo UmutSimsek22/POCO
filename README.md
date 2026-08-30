@@ -1,4 +1,4 @@
-# 📦 PoCo - Mobil POS & Barkodlu Kasa Yönetim Sistemi
+# 📦 POCO - Mobil POS & Barkodlu Kasa Yönetim Sistemi
 
 <p align="center">
   <b>İşletmeler ve Küçük Esnaflar İçin Hızlı, Güvenilir ve Çoklu Cihaz Destekli Mobil Kasa Çözümü</b>
@@ -33,7 +33,7 @@
 
 En güncel derlenmiş Android APK dosyasını telefonunuza indirip doğrudan kurabilirsiniz:
 
-👉 **[PoCo Android APK İndir (GitHub Releases)](https://github.com/UmutSimsek22/PoCO/releases)**
+👉 **[POCO Android APK İndir (GitHub Releases)](https://github.com/UmutSimsek22/PoCO/releases)**
 
 ---
 
