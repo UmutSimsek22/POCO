@@ -16,6 +16,10 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: 📥 Repo Checkout
         uses: actions/checkout@v4
@@ -43,12 +47,19 @@ jobs:
       - name: 🛠️ Expo Android Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: 🔧 Kotlin Sürümünü 1.9.25 Olarak Zorla
+        run: |
+          echo "--- Prebuild sonrası Kotlin sürümü düzeltiliyor ---"
+          sed -i "s/kotlinVersion = .*/kotlinVersion = '1.9.25'/" android/build.gradle
+          echo "--- android/build.gradle kontrol ---"
+          grep -n "kotlinVersion" android/build.gradle
+          echo "--- android/gradle.properties'e ek ayar ---"
+          echo "kotlin.version=1.9.25" >> android/gradle.properties
+
       - name: 🔑 Gradle Wrapper İzni Ver
         run: chmod +x android/gradlew
 
       - name: 🔨 Android APK Derle (Gradle)
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon --stacktrace
