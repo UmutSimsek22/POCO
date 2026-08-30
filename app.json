@@ -39,6 +39,14 @@
         {
           "cameraPermission": "PoCo barkod taramak için kamerayı kullanır."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
       ]
     ]
   }
