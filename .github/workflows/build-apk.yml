@@ -1,0 +1,62 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Repo Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Node.js Kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: ☕ Java 17 Kurulumu
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📱 Android SDK Kurulumu
+        uses: android-actions/setup-android@v3
+
+      - name: 📦 Bağımlılıkları Yükle
+        run: npm ci || npm install
+
+      - name: 🔑 Ortam Değişkenleri (.env) Oluştur
+        run: |
+          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL || 'https://nvzvttrjqbdsicmgjkiv.supabase.co' }}" > .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_3zBX0x0tKfGl-mEZZRq5PA_Ien6vtNE' }}" >> .env
+
+      - name: 🛠️ Expo Android Prebuild
+        run: npx expo prebuild --platform android --clean
+
+      - name: 🔨 Android APK Derle (Gradle)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: 🚀 GitHub Release İle APK Yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/app-release.apk
+          tag_name: ${{ github.ref_name || 'v1.0.0' }}
+          name: PoCo Mobil Barkod & Kasa APK - ${{ github.ref_name || 'v1.0.0' }}
+          body: |
+            🎉 **PoCo Android APK İndirme Bağlantısı**
+            
+            - **app-release.apk** dosyasını Android cihazınıza indirip doğrudan kurabilirsiniz.
+            - Bu sürüm Supabase bulut veritabanına doğrudan bağlıdır ve tüm telefonlarla senkronize çalışır.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
