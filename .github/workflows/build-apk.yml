@@ -47,14 +47,25 @@ jobs:
       - name: 🛠️ Expo Android Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: 🔧 Kotlin Sürümünü 1.9.25 Olarak Zorla
+      - name: 🔧 Kotlin 1.9.24 → 1.9.25 Zorla (Compose Compiler Uyumluluğu)
         run: |
-          echo "--- Prebuild sonrası Kotlin sürümü düzeltiliyor ---"
-          sed -i "s/kotlinVersion = .*/kotlinVersion = '1.9.25'/" android/build.gradle
-          echo "--- android/build.gradle kontrol ---"
-          grep -n "kotlinVersion" android/build.gradle
-          echo "--- android/gradle.properties'e ek ayar ---"
+          echo "=== FIX 1: React Native version catalog'unda Kotlin sürümünü değiştir ==="
+          TOML_FILE="node_modules/react-native/gradle/libs.versions.toml"
+          echo "Önce:"
+          grep 'kotlin = ' "$TOML_FILE"
+          sed -i 's/kotlin = "1.9.24"/kotlin = "1.9.25"/' "$TOML_FILE"
+          echo "Sonra:"
+          grep 'kotlin = ' "$TOML_FILE"
+
+          echo "=== FIX 2: android/build.gradle'da classpath'e sürüm ekle ==="
+          sed -i "s|classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')|classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25')|" android/build.gradle
+          grep 'kotlin-gradle-plugin' android/build.gradle
+
+          echo "=== FIX 3: gradle.properties'e yedek ayar ==="
           echo "kotlin.version=1.9.25" >> android/gradle.properties
+          echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
+
+          echo "=== Tüm düzeltmeler uygulandı ==="
 
       - name: 🔑 Gradle Wrapper İzni Ver
         run: chmod +x android/gradlew
