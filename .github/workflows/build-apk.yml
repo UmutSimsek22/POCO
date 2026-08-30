@@ -36,32 +36,37 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: 📦 Bağımlılıkları Yükle
-        run: npm ci || npm install
+        run: npm install
 
       - name: 🔑 Ortam Değişkenleri (.env) Oluştur
         run: |
-          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL || 'https://nvzvttrjqbdsicmgjkiv.supabase.co' }}" > .env
-          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_3zBX0x0tKfGl-mEZZRq5PA_Ien6vtNE' }}" >> .env
+          echo "EXPO_PUBLIC_SUPABASE_URL=https://nvzvttrjqbdsicmgjkiv.supabase.co" > .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_3zBX0x0tKfGl-mEZZRq5PA_Ien6vtNE" >> .env
 
       - name: 🛠️ Expo Android Prebuild
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --no-install
 
       - name: 🔨 Android APK Derle (Gradle)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleDebug --no-daemon
+
+      - name: 📋 APK Dosyasını Hazırla
+        run: |
+          mkdir -p build_output
+          cp android/app/build/outputs/apk/debug/app-debug.apk build_output/PoCo-v1.0.apk
 
       - name: 🚀 GitHub Release İle APK Yayınla
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: build_output/PoCo-v1.0.apk
           tag_name: v1.0.0
           name: PoCo Mobil Barkod & Kasa APK (v1.0.0)
           body: |
             🎉 **PoCo Android APK İndirme Bağlantısı**
             
-            - **app-release.apk** dosyasını Android cihazınıza indirip doğrudan kurabilirsiniz.
-            - Bu sürüm Supabase bulut veritabanına doğrudan bağlıdır ve tüm telefonlarla senkronize çalışır.
+            - **PoCo-v1.0.apk** dosyasını Android telefonunuza indirip doğrudan kurabilirsiniz.
+            - Bu sürüm Supabase bulut veritabanına bağlıdır, çoklu cihaz realtime senkronizasyonludur ve offline çalışabilir.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
