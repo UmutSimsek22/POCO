@@ -23,17 +23,14 @@ jobs:
       - name: 🟢 Node.js Kurulumu
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: ☕ Java 17 Kurulumu
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: 📱 Android SDK Kurulumu
-        uses: android-actions/setup-android@v3
 
       - name: 📦 Bağımlılıkları Yükle
         run: npm install
@@ -46,11 +43,15 @@ jobs:
       - name: 🛠️ Expo Android Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: 🔑 Gradle Wrapper İzni Ver
+        run: chmod +x android/gradlew
+
       - name: 🔨 Android APK Derle (Gradle)
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: |
           cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: 📋 APK Dosyasını Hazırla
         run: |
@@ -65,7 +66,7 @@ jobs:
           name: PoCo Mobil Barkod & Kasa APK (v1.0.0)
           body: |
             🎉 **PoCo Android APK İndirme Bağlantısı**
-            
+
             - **PoCo-v1.0.apk** dosyasını Android telefonunuza indirip doğrudan kurabilirsiniz.
             - Bu sürüm Supabase bulut veritabanına bağlıdır, çoklu cihaz realtime senkronizasyonludur ve offline çalışabilir.
         env:
