@@ -2,9 +2,14 @@ name: Build & Release Android APK
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -51,8 +56,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: android/app/build/outputs/apk/release/app-release.apk
-          tag_name: ${{ github.ref_name || 'v1.0.0' }}
-          name: PoCo Mobil Barkod & Kasa APK - ${{ github.ref_name || 'v1.0.0' }}
+          tag_name: v1.0.0
+          name: PoCo Mobil Barkod & Kasa APK (v1.0.0)
           body: |
             🎉 **PoCo Android APK İndirme Bağlantısı**
             
