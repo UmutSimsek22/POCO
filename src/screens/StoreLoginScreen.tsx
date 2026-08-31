@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,6 +149,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#F8FAFC',
     padding: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 16 : 24,
     justifyContent: 'center',
   },
   logoSection: {

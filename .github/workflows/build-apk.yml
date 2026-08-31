@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - pocoV2up
     tags:
       - 'v*'
   workflow_dispatch:
@@ -37,7 +38,7 @@ jobs:
           java-version: '17'
 
       - name: 📦 Bağımlılıkları Yükle
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: 🔑 Ortam Değişkenleri (.env) Oluştur
         run: |
@@ -51,15 +52,17 @@ jobs:
         run: |
           echo "=== FIX 1: React Native version catalog'unda Kotlin sürümünü değiştir ==="
           TOML_FILE="node_modules/react-native/gradle/libs.versions.toml"
-          echo "Önce:"
-          grep 'kotlin = ' "$TOML_FILE"
-          sed -i 's/kotlin = "1.9.24"/kotlin = "1.9.25"/' "$TOML_FILE"
-          echo "Sonra:"
-          grep 'kotlin = ' "$TOML_FILE"
+          if [ -f "$TOML_FILE" ]; then
+            echo "Önce:"
+            grep 'kotlin = ' "$TOML_FILE" || true
+            sed -i 's/kotlin = "1.9.24"/kotlin = "1.9.25"/' "$TOML_FILE"
+            echo "Sonra:"
+            grep 'kotlin = ' "$TOML_FILE" || true
+          fi
 
           echo "=== FIX 2: android/build.gradle'da classpath'e sürüm ekle ==="
           sed -i "s|classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')|classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25')|" android/build.gradle
-          grep 'kotlin-gradle-plugin' android/build.gradle
+          grep 'kotlin-gradle-plugin' android/build.gradle || true
 
           echo "=== FIX 3: gradle.properties'e yedek ayar ==="
           echo "kotlin.version=1.9.25" >> android/gradle.properties
@@ -78,25 +81,28 @@ jobs:
       - name: 📋 APK Dosyasını Hazırla
         run: |
           mkdir -p build_output
-          cp android/app/build/outputs/apk/release/app-release.apk build_output/POCO-v1.0.apk
+          cp android/app/build/outputs/apk/release/app-release.apk build_output/POCO-v2.0.apk
 
       - name: 📦 Actions Sayfasına APK'yı Yükle (Doğrudan İndirme)
         uses: actions/upload-artifact@v4
         with:
-          name: POCO-v1.0-apk
-          path: build_output/POCO-v1.0.apk
+          name: POCO-v2.0-apk
+          path: build_output/POCO-v2.0.apk
 
-      - name: 🚀 GitHub Release İle APK Yayınla
+      - name: 🚀 GitHub Release İle APK Yayınla (v2.0.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== GitHub Release Yenileniyor ==="
-          gh release delete v1.0.0 --yes || true
+          echo "=== GitHub Release v2.0.0 Yayınlanıyor ==="
+          gh release delete v2.0.0 --yes || true
           
-          gh release create v1.0.0 build_output/POCO-v1.0.apk \
-            --title "POCO Mobil Barkod & Kasa APK (v1.0.0)" \
-            --notes "🎉 **POCO Standalone Android APK İndirme Bağlantısı**
+          gh release create v2.0.0 build_output/POCO-v2.0.apk \
+            --title "POCO Mobil Barkod & Kasa APK (v2.0.0)" \
+            --notes "🎉 **POCO v2.0.0 Standalone Android APK İndirme Bağlantısı**
 
-          - **POCO-v1.0.apk** dosyasını Android telefonunuza indirip doğrudan kurabilirsiniz.
-          - Bu sürüm bağımsız (Release) olarak derlenmiştir, geliştirici sunucusuna ihtiyaç duymaz.
-          - Supabase bulut veritabanı, çoklu cihaz realtime senkronizasyonu ve offline çalışma desteği mevcuttur."
+          ### 🚀 Bu Sürümdeki Yenilikler (POCO v2):
+          - 🖼️ **Tüm İkonlar Yenilendi:** Geri oku, çıkış, büyüteç, artı, kasa ve QR kod simgeleri net ve renkli hale getirildi.
+          - 📱 **Ekran Taşıntısı Düzeltildi:** Durum çubuğu (Status Bar / Çentik) güvenli alan boşluğu eklendi, butonlar 44x44px geniş dokunmatik kartlara yükseltildi.
+          - 🔍 **Ürün Detay Modalı Kapanma Deneyimi:** Sorgulama kartının altına büyük **'Tamam / Listeye Dön'** butonu ve arka plana dokunarak kapatma eklendi.
+          - 📸 **Kamera İle Ürün Fotoğrafı Çekme:** Ürün eklerken doğrudan kameradan 1:1 fotoğraf çekme özelliği aktif edildi.
+          - ⚡ **Hızlı Kamera Kısayolu:** Ana ekrana doğrudan barkod tarayıcıyı açan hızlı kamera butonu eklendi."

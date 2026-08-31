@@ -9,6 +9,9 @@ import {
   Image,
   Modal,
   SafeAreaView,
+  Platform,
+  StatusBar,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
@@ -50,19 +53,21 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Sol Üst Geri Tuşu & Başlık */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Sol Üst 44x44 Geri Tuşu & Başlık */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" color="#0F172A" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ürün Sorgula</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Arama Alanı & Barkod Okut Butonu */}
       <View style={styles.searchSection}>
         <View style={styles.searchInputWrapper}>
-          <Ionicons name="search" color="#94A3B8" size={20} style={styles.searchIcon} />
+          <Ionicons name="search" color="#94A3B8" size={22} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Ürün adı veya barkod ile ara..."
@@ -71,8 +76,8 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
             onChangeText={setSearchQuery}
           />
           {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close" color="#94A3B8" size={18} />
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
+              <Ionicons name="close-circle" color="#94A3B8" size={20} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -80,6 +85,7 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
         <TouchableOpacity
           style={styles.scanBtn}
           onPress={() => setScannerVisible(true)}
+          activeOpacity={0.8}
         >
           <Ionicons name="qr-code" color="#FFFFFF" size={22} />
         </TouchableOpacity>
@@ -88,7 +94,9 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
       {/* Ürün Listesi */}
       {filteredProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="cube-outline" color="#CBD5E1" size={64} />
+          <View style={styles.emptyIconBadge}>
+            <Ionicons name="cube-outline" color="#94A3B8" size={48} />
+          </View>
           <Text style={styles.emptyTitle}>Ürün Bulunamadı</Text>
           <Text style={styles.emptyText}>
             {searchQuery
@@ -101,6 +109,7 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           data={filteredProducts}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }: { item: Product }) => (
             <TouchableOpacity
               style={styles.productCard}
@@ -127,77 +136,94 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
 
               <View style={styles.priceContainer}>
                 <Text style={styles.sellPriceText}>{item.sell_price.toFixed(2)} TL</Text>
+                <Ionicons name="chevron-forward" color="#CBD5E1" size={18} />
               </View>
             </TouchableOpacity>
           )}
         />
       )}
 
-      {/* Ürün Detay Modalı */}
+      {/* Ürün Detay Modalı (Dışarı dokunarak & Kapat butonuyla çıkış) */}
       {selectedProduct && (
-        <Modal visible transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.detailCard}>
-              <TouchableOpacity
-                style={styles.modalCloseBtn}
-                onPress={() => setSelectedProduct(null)}
-              >
-                <Ionicons name="close" color="#64748B" size={20} />
-              </TouchableOpacity>
+        <Modal visible transparent animationType="fade" onRequestClose={() => setSelectedProduct(null)}>
+          <TouchableWithoutFeedback onPress={() => setSelectedProduct(null)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.detailCard}>
+                  {/* Sağ Üst Kapat Butonu */}
+                  <TouchableOpacity
+                    style={styles.modalCloseBtn}
+                    onPress={() => setSelectedProduct(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close" color="#475569" size={22} />
+                  </TouchableOpacity>
 
-              {selectedProduct.image_url ? (
-                <Image
-                  source={{ uri: selectedProduct.image_url }}
-                  style={styles.detailImage}
-                />
-              ) : (
-                <View style={styles.detailNoImage}>
-                  <Ionicons name="cube-outline" color="#94A3B8" size={48} />
-                </View>
-              )}
+                  {selectedProduct.image_url ? (
+                    <Image
+                      source={{ uri: selectedProduct.image_url }}
+                      style={styles.detailImage}
+                    />
+                  ) : (
+                    <View style={styles.detailNoImage}>
+                      <Ionicons name="cube-outline" color="#94A3B8" size={48} />
+                    </View>
+                  )}
 
-              <Text style={styles.detailName}>{selectedProduct.name}</Text>
+                  <Text style={styles.detailName}>{selectedProduct.name}</Text>
 
-              <View style={styles.detailBarcodeBadge}>
-                <Ionicons name="pricetag" color="#10B981" size={14} />
-                <Text style={styles.detailBarcodeText}>{selectedProduct.barcode}</Text>
-              </View>
-
-              <View style={styles.detailDivider} />
-
-              <View style={styles.detailPricesGrid}>
-                <View style={styles.detailPriceItem}>
-                  <Text style={styles.detailPriceLabel}>Geliş Fiyatı</Text>
-                  <Text style={styles.detailBuyPrice}>
-                    {selectedProduct.buy_price.toFixed(2)} TL
-                  </Text>
-                </View>
-
-                <View style={styles.detailPriceItem}>
-                  <Text style={styles.detailPriceLabel}>Satış Fiyatı</Text>
-                  <Text style={styles.detailSellPrice}>
-                    {selectedProduct.sell_price.toFixed(2)} TL
-                  </Text>
-                </View>
-              </View>
-
-              {/* Kar Marjı Hesabı */}
-              {(() => {
-                const { profit, margin } = calculateProfit(
-                  selectedProduct.buy_price,
-                  selectedProduct.sell_price
-                );
-                return (
-                  <View style={styles.profitCard}>
-                    <Ionicons name="trending-up" color="#047857" size={18} />
-                    <Text style={styles.profitText}>
-                      Birim Kar: <Text style={styles.profitHighlight}>{profit.toFixed(2)} TL</Text> (%{margin})
-                    </Text>
+                  <View style={styles.detailBarcodeBadge}>
+                    <Ionicons name="pricetag" color="#10B981" size={14} />
+                    <Text style={styles.detailBarcodeText}>{selectedProduct.barcode}</Text>
                   </View>
-                );
-              })()}
+
+                  <View style={styles.detailDivider} />
+
+                  <View style={styles.detailPricesGrid}>
+                    <View style={styles.detailPriceItem}>
+                      <Text style={styles.detailPriceLabel}>Geliş Fiyatı</Text>
+                      <Text style={styles.detailBuyPrice}>
+                        {selectedProduct.buy_price.toFixed(2)} TL
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailPriceItem}>
+                      <Text style={styles.detailPriceLabel}>Satış Fiyatı</Text>
+                      <Text style={styles.detailSellPrice}>
+                        {selectedProduct.sell_price.toFixed(2)} TL
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Kar Marjı Hesabı */}
+                  {(() => {
+                    const { profit, margin } = calculateProfit(
+                      selectedProduct.buy_price,
+                      selectedProduct.sell_price
+                    );
+                    return (
+                      <View style={styles.profitCard}>
+                        <Ionicons name="trending-up" color="#047857" size={20} />
+                        <Text style={styles.profitText}>
+                          Birim Kar: <Text style={styles.profitHighlight}>{profit.toFixed(2)} TL</Text> (%{margin})
+                        </Text>
+                      </View>
+                    );
+                  })()}
+
+                  {/* BÜYÜK VE BELİRGİN KAPAT BUTONU */}
+                  <TouchableOpacity
+                    style={styles.modalDismissButton}
+                    onPress={() => setSelectedProduct(null)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="checkmark-circle-outline" color="#FFFFFF" size={20} />
+                    <Text style={styles.modalDismissButtonText}>Tamam / Listeye Dön</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </Modal>
       )}
 
@@ -215,6 +241,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -227,9 +254,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
@@ -238,7 +268,9 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     flexDirection: 'row',
-    padding: 16,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -248,51 +280,58 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
     paddingHorizontal: 12,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 6,
+  },
+  clearSearchBtn: {
+    padding: 4,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingVertical: 12,
+    fontSize: 15,
     color: '#0F172A',
   },
   scanBtn: {
+    width: 46,
+    height: 46,
     backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   listContent: {
     padding: 16,
-    gap: 10,
+    gap: 12,
   },
   productCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
     gap: 12,
   },
   productThumb: {
-    width: 52,
-    height: 52,
+    width: 50,
+    height: 50,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#E2E8F0',
   },
   noThumb: {
-    width: 52,
-    height: 52,
+    width: 50,
+    height: 50,
     borderRadius: 12,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
@@ -302,7 +341,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#0F172A',
   },
@@ -317,7 +356,9 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   priceContainer: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sellPriceText: {
     fontSize: 16,
@@ -328,23 +369,31 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 40,
+  },
+  emptyIconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#334155',
-    marginTop: 16,
+    marginBottom: 6,
   },
   emptyText: {
     fontSize: 14,
     color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 6,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -355,34 +404,45 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
-    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
   },
   modalCloseBtn: {
     position: 'absolute',
     top: 16,
     right: 16,
-    padding: 6,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   detailImage: {
     width: 120,
     height: 120,
     borderRadius: 20,
+    backgroundColor: '#E2E8F0',
     marginBottom: 16,
   },
   detailNoImage: {
     width: 100,
     height: 100,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   detailName: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#0F172A',
     textAlign: 'center',
   },
@@ -393,11 +453,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 10,
     marginTop: 8,
   },
   detailBarcodeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#047857',
   },
@@ -405,17 +465,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 1,
     backgroundColor: '#E2E8F0',
-    marginVertical: 16,
+    marginVertical: 18,
   },
   detailPricesGrid: {
     flexDirection: 'row',
     width: '100%',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    gap: 12,
   },
   detailPriceItem: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   detailPriceLabel: {
     fontSize: 12,
@@ -423,31 +487,52 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   detailBuyPrice: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#475569',
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#0F172A',
   },
   detailSellPrice: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: 'bold',
     color: '#10B981',
   },
   profitCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
     gap: 8,
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginTop: 14,
+    width: '100%',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   profitText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
     color: '#065F46',
+    fontWeight: '600',
   },
   profitHighlight: {
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#047857',
+  },
+  modalDismissButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    backgroundColor: '#0F172A',
+    paddingVertical: 15,
+    borderRadius: 16,
+    marginTop: 18,
+  },
+  modalDismissButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

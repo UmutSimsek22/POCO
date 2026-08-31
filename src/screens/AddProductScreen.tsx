@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useStore } from '../context/StoreContext';
@@ -49,31 +50,43 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('İzin Gerekli', 'Fotoğraf çekebilmek için kamera izni vermelisiniz.');
+          Alert.alert(
+            'Kamera İzni Gerekli 📷',
+            'Ürün fotoğrafı çekebilmek için kamera iznini onaylamanız gerekmektedir.'
+          );
           return;
         }
         const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ['images'],
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
         });
-        if (!result.canceled && result.assets[0]?.uri) {
+        if (!result.canceled && result.assets && result.assets.length > 0) {
           setImageUri(result.assets[0].uri);
         }
       } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Galeri İzni Gerekli 🖼️',
+            'Galeriden fotoğraf seçebilmek için galeri iznini onaylamanız gerekmektedir.'
+          );
+          return;
+        }
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ['images'],
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
         });
-        if (!result.canceled && result.assets[0]?.uri) {
+        if (!result.canceled && result.assets && result.assets.length > 0) {
           setImageUri(result.assets[0].uri);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Görsel seçme hatası:', e);
+      Alert.alert('Fotoğraf Hatası', e?.message || 'Fotoğraf eklenirken bir sorun oluştu.');
     }
   };
 
@@ -119,20 +132,22 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Sol Üst Geri Tuşu ve Başlık */}
+        {/* Sol Üst 44x44 Geri Tuşu ve Başlık */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
             <Ionicons name="arrow-back" color="#0F172A" size={24} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Ürün Ekle</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 44 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Fotoğraf Seçim Alanı */}
           <View style={styles.imageSection}>
             {imageUri ? (
@@ -142,28 +157,33 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
                   style={styles.changeImageBtn}
                   onPress={() => setImageUri(null)}
                 >
+                  <Ionicons name="trash-outline" color="#EF4444" size={16} />
                   <Text style={styles.changeImageBtnText}>Kaldır / Değiştir</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.imagePlaceholder}>
-                <Ionicons name="image-outline" color="#94A3B8" size={40} />
+                <View style={styles.placeholderIconBadge}>
+                  <Ionicons name="camera-outline" color="#10B981" size={36} />
+                </View>
                 <Text style={styles.imagePlaceholderText}>Ürün Fotoğrafı Ekleyin</Text>
                 <View style={styles.imageBtnGroup}>
                   <TouchableOpacity
-                    style={styles.photoBtn}
+                    style={[styles.photoBtn, styles.cameraPhotoBtn]}
                     onPress={() => handlePickImage(true)}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="camera" color="#10B981" size={18} />
-                    <Text style={styles.photoBtnText}>Kamera</Text>
+                    <Ionicons name="camera" color="#047857" size={20} />
+                    <Text style={styles.cameraPhotoBtnText}>Fotoğraf Çek</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.photoBtn}
+                    style={[styles.photoBtn, styles.galleryPhotoBtn]}
                     onPress={() => handlePickImage(false)}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="images" color="#2563EB" size={18} />
-                    <Text style={styles.photoBtnText}>Galeri</Text>
+                    <Ionicons name="images" color="#1D4ED8" size={20} />
+                    <Text style={styles.galleryPhotoBtnText}>Galeriden Seç</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -187,7 +207,7 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
               <Text style={styles.label}>Barkod No *</Text>
               <View style={styles.barcodeInputWrapper}>
                 <TextInput
-                  style={[styles.input, { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
+                  style={[styles.input, styles.barcodeInput]}
                   placeholder="Barkod Okutun veya Elle Girin..."
                   placeholderTextColor="#9CA3AF"
                   value={barcode}
@@ -197,8 +217,9 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
                 <TouchableOpacity
                   style={styles.scanButton}
                   onPress={() => setScannerVisible(true)}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons name="qr-code" color="#FFFFFF" size={20} />
+                  <Ionicons name="qr-code" color="#FFFFFF" size={22} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -229,33 +250,35 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
               </View>
             </View>
 
+            {/* Kaydet Butonu */}
             <TouchableOpacity
-              style={styles.saveButton}
+              style={[styles.submitButton, isSubmitting && styles.disabledButton]}
               onPress={handleSave}
               disabled={isSubmitting}
+              activeOpacity={0.85}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <>
-                  <Ionicons name="save-outline" color="#FFFFFF" size={20} />
-                  <Text style={styles.saveButtonText}>Ürünü Kaydet</Text>
-                </>
+                <View style={styles.btnContent}>
+                  <Ionicons name="checkmark-circle" color="#FFFFFF" size={22} />
+                  <Text style={styles.submitButtonText}>Ürünü Kaydet</Text>
+                </View>
               )}
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
 
-      {/* Barkod Okuma Modalı */}
-      <BarcodeScannerModal
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
-        onBarcodeScanned={(scannedCode) => {
-          setBarcode(scannedCode);
-          setScannerVisible(false);
-        }}
-      />
+        {/* Barkod Okuma Modalı */}
+        <BarcodeScannerModal
+          visible={scannerVisible}
+          onClose={() => setScannerVisible(false)}
+          onBarcodeScanned={(scannedCode) => {
+            setBarcode(scannedCode);
+            setScannerVisible(false);
+          }}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -264,6 +287,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -276,9 +300,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
@@ -287,102 +314,141 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
   imageSection: {
-    marginBottom: 16,
-  },
-  imagePlaceholder: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderStyle: 'dashed',
-    padding: 20,
-    alignItems: 'center',
-  },
-  imagePlaceholderText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  imageBtnGroup: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  photoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  photoBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
+    marginBottom: 20,
   },
   previewContainer: {
     alignItems: 'center',
+    gap: 10,
   },
   imagePreview: {
     width: 140,
     height: 140,
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: '#E2E8F0',
+    borderWidth: 2,
+    borderColor: '#10B981',
   },
   changeImageBtn: {
-    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
   },
   changeImageBtnText: {
     color: '#EF4444',
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  imagePlaceholder: {
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  placeholderIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  imagePlaceholderText: {
+    color: '#475569',
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: 16,
+  },
+  imageBtnGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  photoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  cameraPhotoBtn: {
+    backgroundColor: '#D1FAE5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  cameraPhotoBtnText: {
+    color: '#065F46',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  galleryPhotoBtn: {
+    backgroundColor: '#DBEAFE',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  galleryPhotoBtnText: {
+    color: '#1E40AF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   formCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 16,
   },
   inputGroup: {
-    marginBottom: 16,
+    gap: 6,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#334155',
-    marginBottom: 6,
   },
   input: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     color: '#0F172A',
   },
-  sellInput: {
-    borderColor: '#10B981',
-    fontWeight: 'bold',
-    color: '#047857',
-  },
   barcodeInputWrapper: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
+  },
+  barcodeInput: {
+    flex: 1,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
   },
   scanButton: {
     backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     borderTopRightRadius: 12,
     borderBottomRightRadius: 12,
-    paddingHorizontal: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -390,17 +456,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  saveButton: {
+  sellInput: {
+    borderColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+    fontWeight: 'bold',
+  },
+  submitButton: {
     backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginTop: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  saveButtonText: {
+  disabledButton: {
+    opacity: 0.6,
+  },
+  btnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  submitButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',

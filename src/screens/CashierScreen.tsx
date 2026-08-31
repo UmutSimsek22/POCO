@@ -11,6 +11,8 @@ import {
   Alert,
   SafeAreaView,
   ActivityIndicator,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { useCart } from '../context/CartContext';
@@ -363,6 +365,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -375,9 +378,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

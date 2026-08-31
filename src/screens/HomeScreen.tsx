@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,8 +7,10 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
+import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { Ionicons } from '@expo/vector-icons';
 
 interface HomeScreenProps {
@@ -17,6 +19,7 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const { store, logoutStore, products } = useStore();
+  const [scannerVisible, setScannerVisible] = useState<boolean>(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -29,25 +32,65 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     );
   };
 
+  const handleQuickScan = (scannedCode: string) => {
+    setScannerVisible(false);
+    const matched = products.find((p) => p.barcode === scannedCode);
+    if (matched) {
+      Alert.alert(
+        'Ürün Bulundu ✅',
+        `Ürün: ${matched.name}\nBarkod: ${matched.barcode}\nSatış Fiyatı: ${matched.sell_price.toFixed(2)} TL\nGeliş Fiyatı: ${matched.buy_price.toFixed(2)} TL`,
+        [
+          { text: 'Kapat', style: 'cancel' },
+          { text: 'Sorgula Ekranına Git', onPress: () => onNavigate('query') },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Ürün Bulunamadı ⚠️',
+        `Barkod: ${scannedCode}\nBu barkoda ait kayıtlı ürün bulunamadı.`,
+        [
+          { text: 'Kapat', style: 'cancel' },
+          { text: 'Ürün Olarak Ekle', onPress: () => onNavigate('add') },
+        ]
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Üst Mağaza Bilgisi & Çıkış */}
+      {/* Üst Mağaza Bilgisi & Hızlı Kamera & Çıkış */}
       <View style={styles.header}>
         <View style={styles.storeInfo}>
           <View style={styles.storeBadge}>
-            <Ionicons name="storefront-outline" color="#10B981" size={18} />
+            <Ionicons name="storefront" color="#10B981" size={22} />
           </View>
-          <View>
-            <Text style={styles.storeName}>{store?.name || 'Mağazam'}</Text>
+          <View style={styles.storeTextContainer}>
+            <Text style={styles.storeName} numberOfLines={1}>{store?.name || 'Mağazam'}</Text>
             <Text style={styles.storeCode}>Kod: {store?.store_code}</Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" color="#EF4444" size={20} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {/* HIZLI KAMERA BUTONU */}
+          <TouchableOpacity
+            style={styles.cameraBtn}
+            onPress={() => setScannerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="camera" color="#059669" size={22} />
+          </TouchableOpacity>
+
+          {/* ÇIKIŞ BUTONU */}
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" color="#EF4444" size={22} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Ana Butonlar Alanı */}
@@ -71,6 +114,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               <Text style={styles.buttonTitle}>Sorgula</Text>
               <Text style={styles.buttonDesc}>Ürün arayın veya detay inceleyin</Text>
             </View>
+            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
           </TouchableOpacity>
 
           {/* 2. EKLE BUTONU */}
@@ -80,12 +124,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             activeOpacity={0.85}
           >
             <View style={[styles.iconBox, styles.addIconBox]}>
-              <Ionicons name="add" color="#059669" size={32} />
+              <Ionicons name="add-circle" color="#059669" size={32} />
             </View>
             <View style={styles.buttonTextContainer}>
               <Text style={styles.buttonTitle}>Ekle</Text>
               <Text style={styles.buttonDesc}>Yeni ürün ve barkod kaydedin</Text>
             </View>
+            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
           </TouchableOpacity>
 
           {/* 3. HESAPLA BUTONU */}
@@ -101,9 +146,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               <Text style={styles.buttonTitle}>Hesapla</Text>
               <Text style={styles.buttonDesc}>Hızlı kasa & satış ödemesi</Text>
             </View>
+            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Hızlı Barkod Okuma Modalı */}
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onBarcodeScanned={handleQuickScan}
+      />
     </SafeAreaView>
   );
 };
@@ -112,6 +165,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -127,14 +181,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   storeBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#D1FAE5',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  storeTextContainer: {
+    flex: 1,
   },
   storeName: {
     fontSize: 16,
@@ -144,11 +202,32 @@ const styles = StyleSheet.create({
   storeCode: {
     fontSize: 12,
     color: '#64748B',
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cameraBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   logoutBtn: {
-    padding: 8,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   content: {
     flex: 1,
@@ -156,12 +235,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   welcomeText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     color: '#0F172A',
   },
   subtitleText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#64748B',
     marginTop: 4,
     marginBottom: 28,
@@ -171,21 +250,21 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   buttonGrid: {
-    gap: 16,
+    gap: 18,
   },
   mainButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
-    elevation: 2,
+    elevation: 3,
     gap: 16,
   },
   queryButton: {
@@ -198,9 +277,9 @@ const styles = StyleSheet.create({
     borderColor: '#FDE68A',
   },
   iconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -224,6 +303,6 @@ const styles = StyleSheet.create({
   buttonDesc: {
     fontSize: 13,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 3,
   },
 });

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from './src/context/StoreContext';
 import { CartProvider } from './src/context/CartContext';
 import { StoreLoginScreen } from './src/screens/StoreLoginScreen';
@@ -64,13 +67,27 @@ const MainNavigator: React.FC = () => {
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#10B981" />
+      </View>
+    );
+  }
+
   return (
-    <StoreProvider>
-      <CartProvider>
-        <StatusBar style="dark" />
-        <MainNavigator />
-      </CartProvider>
-    </StoreProvider>
+    <SafeAreaProvider>
+      <StoreProvider>
+        <CartProvider>
+          <StatusBar style="dark" />
+          <MainNavigator />
+        </CartProvider>
+      </StoreProvider>
+    </SafeAreaProvider>
   );
 }
 

@@ -41,6 +41,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "POCO ürün fotoğrafı seçmek için galeriye erişim ister.",
+          "cameraPermission": "POCO ürün fotoğrafı çekmek için kamerayı kullanır."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
