@@ -1,8 +1,14 @@
+export type UserRole = 'admin' | 'manager' | 'staff';
+
 export interface Store {
   id: string;
   store_code: string;
   pin_code: string;
   name: string;
+  is_approved?: boolean;
+  admin_code?: string;
+  manager_code?: string;
+  staff_code?: string;
   created_at?: string;
 }
 
@@ -14,8 +20,10 @@ export interface Product {
   buy_price: number;
   sell_price: number;
   image_url?: string | null;
-  category?: string;
+  category?: string | null;
+  brand?: string | null;
   stock_quantity?: number;
+  is_deleted?: boolean;
   created_at?: string;
   updated_at?: string;
 }

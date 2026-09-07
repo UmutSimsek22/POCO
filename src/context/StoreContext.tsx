@@ -1,33 +1,37 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { Store, Product } from '../types';
+import { Store, Product, UserRole } from '../types';
 
 interface StoreContextType {
   store: Store | null;
+  role: UserRole;
   products: Product[];
   isLoading: boolean;
-  loginStore: (storeCode: string, pinCode: string) => Promise<{ success: boolean; error?: string }>;
-  createStore: (storeCode: string, pinCode: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  loginStore: (storeCode: string, pinCode: string, roleCode?: string) => Promise<{ success: boolean; error?: string }>;
+  createStore: (storeCode: string, pinCode: string, name: string) => Promise<{ success: boolean; store?: Store; error?: string }>;
   logoutStore: () => Promise<void>;
   fetchProducts: () => Promise<void>;
   addProduct: (productData: Omit<Product, 'id' | 'store_id'>, imageUri?: string | null) => Promise<{ success: boolean; product?: Product; error?: string }>;
+  updateProduct: (productId: string, productData: Partial<Product>, imageUri?: string | null) => Promise<{ success: boolean; product?: Product; error?: string }>;
+  deleteProduct: (productId: string) => Promise<{ success: boolean; error?: string }>;
   uploadProductImage: (uri: string) => Promise<string | null>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 const STORE_STORAGE_KEY = '@poco_active_store';
+const USER_ROLE_KEY = '@poco_user_role';
 const PRODUCTS_CACHE_KEY = '@poco_cached_products';
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [store, setStore] = useState<Store | null>(null);
+  const [role, setRole] = useState<UserRole>('admin');
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Uygulama açılışında kayıtlı mağazayı ve önbellekteki ürünleri yükle
+  // Uygulama açılışında kayıtlı mağazayı, rolü ve önbellekteki ürünleri yükle
   useEffect(() => {
-
     loadSavedStore();
   }, []);
 
@@ -65,6 +69,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       setIsLoading(true);
       const savedStore = await AsyncStorage.getItem(STORE_STORAGE_KEY);
+      const savedRole = await AsyncStorage.getItem(USER_ROLE_KEY);
+
+      if (savedRole && (savedRole === 'admin' || savedRole === 'manager' || savedRole === 'staff')) {
+        setRole(savedRole as UserRole);
+      }
+
       if (savedStore) {
         const parsedStore: Store = JSON.parse(savedStore);
         setStore(parsedStore);
@@ -82,11 +92,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const loginStore = async (storeCode: string, pinCode: string) => {
+  const loginStore = async (storeCode: string, pinCode: string, roleCode?: string) => {
     try {
       setIsLoading(true);
       const cleanCode = storeCode.trim().toUpperCase();
       const cleanPin = pinCode.trim();
+      const cleanRoleCode = roleCode?.trim().toUpperCase();
 
       const { data, error } = await supabase
         .from('stores')
@@ -100,8 +111,46 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       const activeStore: Store = data;
+
+      // Mağaza onay durumu kontrolü
+      if (activeStore.is_approved === false) {
+        return {
+          success: false,
+          error: 'Mağazanız henüz onaylanmamıştır. Lütfen sistem yöneticiniz ile iletişime geçiniz.',
+        };
+      }
+
+      // Rol tespiti
+      let determinedRole: UserRole = 'admin';
+
+      if (cleanRoleCode) {
+        const adminKey = (activeStore.admin_code || 'ADMIN').toUpperCase();
+        const managerKey = (activeStore.manager_code || 'MUDUR').toUpperCase();
+        const staffKey = (activeStore.staff_code || 'KASA').toUpperCase();
+
+        if (cleanRoleCode === adminKey || cleanRoleCode === cleanPin) {
+          determinedRole = 'admin';
+        } else if (cleanRoleCode === managerKey) {
+          determinedRole = 'manager';
+        } else if (cleanRoleCode === staffKey) {
+          determinedRole = 'staff';
+        } else {
+          return {
+            success: false,
+            error: 'Geçersiz Personel / Rol Kodu! Lütfen yöneticinizden aldığınız kodu girin.',
+          };
+        }
+      } else {
+        // Rol kodu girilmediyse varsayılan olarak admin girişi
+        determinedRole = 'admin';
+      }
+
       setStore(activeStore);
+      setRole(determinedRole);
+
       await AsyncStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(activeStore));
+      await AsyncStorage.setItem(USER_ROLE_KEY, determinedRole);
+
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message || 'Giriş yapılırken bir hata oluştu.' };
@@ -121,17 +170,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return { success: false, error: 'Lütfen tüm alanları doldurun!' };
       }
 
-      const { data, error } = await supabase
+      // Rastgele rol erişim kodları oluştur
+      const defaultAdminCode = `ADM${Math.floor(100 + Math.random() * 900)}`;
+      const defaultManagerCode = `MDR${Math.floor(100 + Math.random() * 900)}`;
+      const defaultStaffCode = `KSA${Math.floor(100 + Math.random() * 900)}`;
+
+      let payload: any = {
+        store_code: cleanCode,
+        pin_code: cleanPin,
+        name: cleanName,
+        is_approved: true, // v3 başlangıç onaylı (isteğe göre SQL'den false yapılabilir)
+        admin_code: defaultAdminCode,
+        manager_code: defaultManagerCode,
+        staff_code: defaultStaffCode,
+      };
+
+      let { data, error } = await supabase
         .from('stores')
-        .insert([
-          {
-            store_code: cleanCode,
-            pin_code: cleanPin,
-            name: cleanName,
-          },
-        ])
+        .insert([payload])
         .select()
         .single();
+
+      // Eğer yeni sütunlar henüz migration edilmediyse temel payload ile dene
+      if (error && error.message?.includes('column')) {
+        const fallbackPayload = {
+          store_code: cleanCode,
+          pin_code: cleanPin,
+          name: cleanName,
+        };
+        const retry = await supabase
+          .from('stores')
+          .insert([fallbackPayload])
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         if (error.code === '23505') {
@@ -142,8 +216,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const newStore: Store = data;
       setStore(newStore);
+      setRole('admin');
+
       await AsyncStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(newStore));
-      return { success: true };
+      await AsyncStorage.setItem(USER_ROLE_KEY, 'admin');
+
+      return { success: true, store: newStore };
     } catch (e: any) {
       return { success: false, error: e.message || 'Mağaza oluşturulurken hata oluştu.' };
     } finally {
@@ -153,8 +231,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const logoutStore = async () => {
     setStore(null);
+    setRole('admin');
     setProducts([]);
     await AsyncStorage.removeItem(STORE_STORAGE_KEY);
+    await AsyncStorage.removeItem(USER_ROLE_KEY);
   };
 
   const fetchProducts = async () => {
@@ -167,10 +247,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .order('name', { ascending: true });
 
       if (!error && data) {
-        const formattedProducts: Product[] = data.map((p) => ({
+        // Silinmiş (is_deleted === true) ürünleri filtrele
+        const activeData = data.filter((p: any) => !p.is_deleted);
+
+        const formattedProducts: Product[] = activeData.map((p: any) => ({
           ...p,
-          buy_price: Number(p.buy_price),
-          sell_price: Number(p.sell_price),
+          buy_price: Number(p.buy_price) || 0,
+          sell_price: Number(p.sell_price) || 0,
+          category: p.category || 'Genel',
+          brand: p.brand || null,
+          image_url: p.image_url || null,
         }));
 
         setProducts(formattedProducts);
@@ -199,7 +285,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
 
       if (error) {
-        console.error('Görsel yükleme hatası:', error);
+        console.warn('Görsel yükleme uyarısı (product-images bucket oluşturulmamış olabilir):', error.message);
         return null;
       }
 
@@ -230,21 +316,41 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      const payload = {
+      // Barkod boş bırakılmışsa otomatik benzersiz kod oluştur
+      const finalBarcode = productData.barcode?.trim()
+        ? productData.barcode.trim()
+        : `POCO_${Date.now().toString().slice(-8)}`;
+
+      const payload: any = {
         store_id: store.id,
-        barcode: productData.barcode.trim(),
+        barcode: finalBarcode,
         name: productData.name.trim(),
-        buy_price: productData.buy_price,
+        buy_price: productData.buy_price ?? 0,
         sell_price: productData.sell_price,
         image_url: finalImageUrl,
-        category: productData.category || 'Genel',
+        category: productData.category?.trim() || 'Genel',
+        brand: productData.brand?.trim() || null,
+        is_deleted: false,
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('products')
         .upsert([payload], { onConflict: 'store_id,barcode' })
         .select()
         .single();
+
+      // Eğer brand veya is_deleted henüz DB'de yoksa fallback ile dene
+      if (error && error.message?.includes('column')) {
+        delete payload.brand;
+        delete payload.is_deleted;
+        const retry = await supabase
+          .from('products')
+          .upsert([payload], { onConflict: 'store_id,barcode' })
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         return { success: false, error: error.message };
@@ -252,13 +358,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const newProduct: Product = {
         ...data,
-        buy_price: Number(data.buy_price),
-        sell_price: Number(data.sell_price),
+        buy_price: Number(data.buy_price) || 0,
+        sell_price: Number(data.sell_price) || 0,
+        category: data.category || 'Genel',
+        brand: data.brand || null,
       };
 
       // Yerel state güncelle
       setProducts((prev) => {
-        const existingIdx = prev.findIndex((p) => p.barcode === newProduct.barcode);
+        const existingIdx = prev.findIndex((p) => p.id === newProduct.id || p.barcode === newProduct.barcode);
         if (existingIdx >= 0) {
           const updated = [...prev];
           updated[existingIdx] = newProduct;
@@ -273,10 +381,113 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const updateProduct = async (
+    productId: string,
+    updates: Partial<Product>,
+    imageUri?: string | null
+  ) => {
+    if (!store) return { success: false, error: 'Aktif mağaza bulunamadı!' };
+
+    try {
+      let finalImageUrl: string | null | undefined = updates.image_url;
+
+      if (imageUri && !imageUri.startsWith('http')) {
+        const uploadedUrl = await uploadProductImage(imageUri);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        }
+      }
+
+      const payload: any = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (finalImageUrl !== undefined) {
+        payload.image_url = finalImageUrl;
+      }
+
+      // ID ve store_id güncelleme payload'ında gönderilmez
+      delete payload.id;
+      delete payload.store_id;
+
+      let { data, error } = await supabase
+        .from('products')
+        .update(payload)
+        .eq('id', productId)
+        .eq('store_id', store.id)
+        .select()
+        .single();
+
+      if (error && error.message?.includes('column')) {
+        delete payload.brand;
+        delete payload.is_deleted;
+        const retry = await supabase
+          .from('products')
+          .update(payload)
+          .eq('id', productId)
+          .eq('store_id', store.id)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const updatedProduct: Product = {
+        ...data,
+        buy_price: Number(data.buy_price) || 0,
+        sell_price: Number(data.sell_price) || 0,
+      };
+
+      setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));
+      return { success: true, product: updatedProduct };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Ürün güncellenirken hata oluştu.' };
+    }
+  };
+
+  const deleteProduct = async (productId: string) => {
+    if (!store) return { success: false, error: 'Aktif mağaza bulunamadı!' };
+
+    try {
+      // Soft delete: is_deleted sütununu true yap
+      let { error } = await supabase
+        .from('products')
+        .update({ is_deleted: true })
+        .eq('id', productId)
+        .eq('store_id', store.id);
+
+      // Eğer is_deleted sütunu DB'de henüz yoksa normal silme dene
+      if (error && error.message?.includes('column')) {
+        const hardDelete = await supabase
+          .from('products')
+          .delete()
+          .eq('id', productId)
+          .eq('store_id', store.id);
+        error = hardDelete.error;
+      }
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Yerel listeden kaldır
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Ürün silinirken hata oluştu.' };
+    }
+  };
+
   return (
     <StoreContext.Provider
       value={{
         store,
+        role,
         products,
         isLoading,
         loginStore,
@@ -284,6 +495,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         logoutStore,
         fetchProducts,
         addProduct,
+        updateProduct,
+        deleteProduct,
         uploadProductImage,
       }}
     >

@@ -8,8 +8,9 @@ import {
   TextInput,
   Alert,
   SafeAreaView,
+  LayoutChangeEvent,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -29,6 +30,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const [manualBarcode, setManualBarcode] = useState<string>('');
   const [showManualInput, setShowManualInput] = useState<boolean>(false);
   const [scanned, setScanned] = useState<boolean>(false);
+  const [cameraLayout, setCameraLayout] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -58,11 +60,58 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
-  const handleBarcodeScanned = ({ data }: { data: string }) => {
+  const handleCameraLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setCameraLayout({ width, height });
+    }
+  };
+
+  const handleBarcodeScanned = (result: BarcodeScanningResult) => {
     if (scanned) return;
+
+    // ROI Alan Kısıtlaması (Barkod sadece yeşil kılavuz alanındaysa okunur)
+    if (cameraLayout && cameraLayout.width > 0 && cameraLayout.height > 0) {
+      let barcodeX: number | null = null;
+      let barcodeY: number | null = null;
+
+      if (result.bounds && result.bounds.size.width > 0) {
+        barcodeX = result.bounds.origin.x + result.bounds.size.width / 2;
+        barcodeY = result.bounds.origin.y + result.bounds.size.height / 2;
+      } else if (result.cornerPoints && result.cornerPoints.length > 0) {
+        barcodeX = result.cornerPoints.reduce((sum, p) => sum + p.x, 0) / result.cornerPoints.length;
+        barcodeY = result.cornerPoints.reduce((sum, p) => sum + p.y, 0) / result.cornerPoints.length;
+      }
+
+      if (barcodeX !== null && barcodeY !== null) {
+        // Eğer koordinatlar 0..1 aralığında normalize edilmişse piksele dönüştür
+        if (barcodeX <= 1 && barcodeY <= 1) {
+          barcodeX = barcodeX * cameraLayout.width;
+          barcodeY = barcodeY * cameraLayout.height;
+        }
+
+        const targetW = 280; // Kılavuz kutu ve hafif ergonomik tolerans
+        const targetH = 200;
+        const targetLeft = (cameraLayout.width - targetW) / 2;
+        const targetTop = (cameraLayout.height - targetH) / 2;
+        const targetRight = targetLeft + targetW;
+        const targetBottom = targetTop + targetH;
+
+        // Eğer tespit edilen barkod yeşil hedef kutunun dışındaysa okumayı reddet
+        if (
+          barcodeX < targetLeft ||
+          barcodeX > targetRight ||
+          barcodeY < targetTop ||
+          barcodeY > targetBottom
+        ) {
+          return;
+        }
+      }
+    }
+
     setScanned(true);
     playBeepSound();
-    onBarcodeScanned(data);
+    onBarcodeScanned(result.data);
   };
 
   const handleManualSubmit = () => {
@@ -120,7 +169,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             </TouchableOpacity>
           </View>
         ) : permission?.granted ? (
-          <View style={styles.cameraWrapper}>
+          <View style={styles.cameraWrapper} onLayout={handleCameraLayout}>
             <CameraView
               style={StyleSheet.absoluteFillObject}
               enableTorch={enableTorch}
@@ -144,7 +193,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   <View style={[styles.corner, styles.bottomLeft]} />
                   <View style={[styles.corner, styles.bottomRight]} />
                 </View>
-                <Text style={styles.scanHint}>Barkodu hizalayın</Text>
+                <Text style={styles.scanHint}>Barkodu yeşil kutunun içine hizalayın</Text>
               </View>
             </CameraView>
 

@@ -13,11 +13,12 @@ import {
   ActivityIndicator,
   Platform,
   StatusBar,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { CartItem } from '../types';
+import { CartItem, Product } from '../types';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -30,7 +31,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   onBack,
   onNavigateToAddProductWithBarcode,
 }) => {
-  const { products, store } = useStore();
+  const { products, store, role } = useStore();
   const { cartItems, addToCart, removeFromCart, clearCart, totalAmount } = useCart();
 
   const [scannerVisible, setScannerVisible] = useState<boolean>(false);
@@ -40,6 +41,14 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   const [completeModalVisible, setCompleteModalVisible] = useState<boolean>(false);
   const [givenAmountStr, setGivenAmountStr] = useState<string>('');
   const [isSavingSale, setIsSavingSale] = useState<boolean>(false);
+
+  // Manuel Tutar / Hızlı Artı Ürün Modalı
+  const [manualModalVisible, setManualModalVisible] = useState<boolean>(false);
+  const [manualAmount, setManualAmount] = useState<string>('');
+  const [manualTitle, setManualTitle] = useState<string>('');
+
+  // Görsel yükleme hatası olan ürünler
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   // Barkod tarandığında tetiklenen fonksiyon
   const handleBarcodeScanned = (scannedCode: string) => {
@@ -61,6 +70,34 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
     }
   };
 
+  // Bilinmeyen barkoda veya manuel butona hızlı tutar ekle
+  const handleAddManualProduct = (forcedBarcode?: string) => {
+    const amount = Number(manualAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert('Geçersiz Tutar', 'Lütfen 0 dan büyük bir tutar giriniz.');
+      return;
+    }
+
+    const code = forcedBarcode || `MANUAL_${Date.now().toString().slice(-6)}`;
+    const title = manualTitle.trim() || (forcedBarcode ? `Barkodlu (${forcedBarcode})` : 'Hızlı / Manuel Kalem');
+
+    const manualProduct: Product = {
+      id: `manual_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      store_id: store?.id || '',
+      barcode: code,
+      name: title,
+      sell_price: amount,
+      buy_price: 0,
+      category: 'Manuel',
+    };
+
+    addToCart(manualProduct);
+    setManualAmount('');
+    setManualTitle('');
+    setManualModalVisible(false);
+    setUnknownBarcode(null);
+  };
+
   // Müşterinin verdiği paraya göre para üstü hesabı
   const givenAmount = Number(givenAmountStr) || 0;
   const changeAmount = givenAmount > totalAmount ? givenAmount - totalAmount : 0;
@@ -72,10 +109,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
       return;
     }
     if (givenAmount < totalAmount) {
-      Alert.alert(
-        'Eksik Tutar',
-        'Müşterinin verdiği para toplam tutardan az olamaz.'
-      );
+      Alert.alert('Eksik Tutar', 'Müşterinin verdiği para toplam tutardan az olamaz.');
       return;
     }
 
@@ -101,16 +135,14 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
 
       const saleItemsPayload = cartItems.map((item) => ({
         sale_id: saleData.id,
-        product_id: item.product.id,
+        product_id: item.product.id.startsWith('manual_') ? null : item.product.id,
         product_name: item.product.name,
         barcode: item.product.barcode,
         sell_price: item.product.sell_price,
-        buy_price: item.product.buy_price,
+        buy_price: item.product.buy_price || 0,
       }));
 
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleItemsPayload);
+      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsPayload);
 
       if (itemsError) {
         console.error('Satış kalemleri ekleme hatası:', itemsError);
@@ -133,19 +165,32 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
       {/* Sol Üst Geri Tuşu & Başlık */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" color="#0F172A" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Hesapla & Kasa</Text>
-        {cartItems.length > 0 ? (
-          <TouchableOpacity onPress={clearCart} style={styles.clearBtn}>
-            <Text style={styles.clearBtnText}>Temizle</Text>
+
+        <View style={styles.headerRightActions}>
+          {/* HIZLI MANUEL TUTAR BUTONU */}
+          <TouchableOpacity
+            style={styles.headerManualBtn}
+            onPress={() => setManualModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add-circle" size={18} color="#D97706" />
+            <Text style={styles.headerManualBtnText}>+ Tutar</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 60 }} />
-        )}
+
+          {cartItems.length > 0 && (
+            <TouchableOpacity onPress={clearCart} style={styles.clearBtn} activeOpacity={0.8}>
+              <Text style={styles.clearBtnText}>Temizle</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Beyaz Sayfa - Hesaplanan Ürünlerin Dikey Listesi */}
@@ -155,7 +200,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
             <Ionicons name="calculator-outline" color="#CBD5E1" size={72} />
             <Text style={styles.emptyCanvasTitle}>Kasa Boş</Text>
             <Text style={styles.emptyCanvasText}>
-              Aşağıdaki yeşil "EKLE" butonuna basarak ürünlerin barkodunu okutun.
+              Aşağıdaki yeşil "TARA" butonuna basarak barkod okutun veya "+ Tutar" ile doğrudan fiyat ekleyin.
             </Text>
           </View>
         ) : (
@@ -163,38 +208,53 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
             data={cartItems}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.cartListContent}
-            renderItem={({ item }: { item: CartItem }) => (
-              <View style={styles.cartItemRow}>
-                {item.product.image_url ? (
-                  <Image source={{ uri: item.product.image_url }} style={styles.itemImage} />
-                ) : (
-                  <View style={styles.itemNoImage}>
-                    <Ionicons name="cube-outline" color="#94A3B8" size={22} />
+            renderItem={({ item }: { item: CartItem }) => {
+              const hasValidImage =
+                item.product.image_url && !failedImages[item.product.image_url];
+              return (
+                <View style={styles.cartItemRow}>
+                  {hasValidImage ? (
+                    <Image
+                      source={{ uri: item.product.image_url! }}
+                      style={styles.itemImage}
+                      onError={() =>
+                        setFailedImages((prev) => ({ ...prev, [item.product.image_url!]: true }))
+                      }
+                    />
+                  ) : (
+                    <View style={styles.itemNoImage}>
+                      <Ionicons
+                        name={item.product.id.startsWith('manual_') ? 'cash-outline' : 'cube-outline'}
+                        color="#94A3B8"
+                        size={22}
+                      />
+                    </View>
+                  )}
+
+                  <View style={styles.itemDetails}>
+                    <Text style={styles.itemName} numberOfLines={1}>
+                      {item.product.name}
+                    </Text>
+                    <Text style={styles.itemBarcode}>{item.product.barcode}</Text>
                   </View>
-                )}
 
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName} numberOfLines={1}>
-                    {item.product.name}
-                  </Text>
-                  <Text style={styles.itemBarcode}>{item.product.barcode}</Text>
+                  <Text style={styles.itemPrice}>{item.product.sell_price.toFixed(2)} TL</Text>
+
+                  <TouchableOpacity
+                    style={styles.deleteRowBtn}
+                    onPress={() => removeFromCart(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" color="#EF4444" size={18} />
+                  </TouchableOpacity>
                 </View>
-
-                <Text style={styles.itemPrice}>{item.product.sell_price.toFixed(2)} TL</Text>
-
-                <TouchableOpacity
-                  style={styles.deleteRowBtn}
-                  onPress={() => removeFromCart(item.id)}
-                >
-                  <Ionicons name="trash-outline" color="#EF4444" size={18} />
-                </TouchableOpacity>
-              </View>
-            )}
+              );
+            }}
           />
         )}
       </View>
 
-      {/* Alt Toplam Fiyat Barı & EKLE / TAMAMLA Butonları */}
+      {/* Alt Toplam Fiyat Barı & TARA / MANUEL / TAMAMLA Butonları */}
       <View style={styles.bottomSection}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Toplam Tutar:</Text>
@@ -202,17 +262,27 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         </View>
 
         <View style={styles.actionButtonGroup}>
-          {/* YEŞİL EKLE BUTONU */}
+          {/* YEŞİL BARKOD TARA BUTONU */}
           <TouchableOpacity
             style={styles.greenAddButton}
             onPress={() => setScannerVisible(true)}
             activeOpacity={0.85}
           >
-            <Ionicons name="add" color="#FFFFFF" size={24} />
-            <Text style={styles.greenAddButtonText}>EKLE</Text>
+            <Ionicons name="barcode" color="#FFFFFF" size={22} />
+            <Text style={styles.greenAddButtonText}>TARA</Text>
           </TouchableOpacity>
 
-          {/* TAMAMLA BUTONU */}
+          {/* SARI MANUEL BUTONU */}
+          <TouchableOpacity
+            style={styles.amberManualButton}
+            onPress={() => setManualModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" color="#FFFFFF" size={22} />
+            <Text style={styles.amberManualButtonText}>MANUEL</Text>
+          </TouchableOpacity>
+
+          {/* MAVİ TAMAMLA BUTONU */}
           <TouchableOpacity
             style={[
               styles.completeButton,
@@ -222,13 +292,63 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
             disabled={cartItems.length === 0}
             activeOpacity={0.85}
           >
-            <Ionicons name="checkmark-circle" color="#FFFFFF" size={22} />
+            <Ionicons name="checkmark-circle" color="#FFFFFF" size={20} />
             <Text style={styles.completeButtonText}>TAMAMLA</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 1. ÜRÜN BULUNAMADI MODALI */}
+      {/* HIZLI MANUEL TUTAR MODALI */}
+      <Modal visible={manualModalVisible} transparent animationType="slide" onRequestClose={() => setManualModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.manualModalBox}>
+              <View style={styles.manualModalHeader}>
+                <Ionicons name="cash-outline" size={24} color="#D97706" />
+                <Text style={styles.manualModalTitle}>Manuel Tutar Ekle</Text>
+                <TouchableOpacity onPress={() => setManualModalVisible(false)}>
+                  <Ionicons name="close" size={22} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.manualModalSubtitle}>
+                Sistemde kaydı olmayan ürünler için kasaya hızlıca tutar ekleyebilirsiniz.
+              </Text>
+
+              <Text style={styles.manualInputLabel}>Fiyat (TL) *</Text>
+              <TextInput
+                style={styles.manualPriceInput}
+                placeholder="0.00"
+                placeholderTextColor="#94A3B8"
+                value={manualAmount}
+                onChangeText={setManualAmount}
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+
+              <Text style={styles.manualInputLabel}>Ürün Açıklaması (Opsiyonel)</Text>
+              <TextInput
+                style={styles.manualDescInput}
+                placeholder="Örn: Ekmek, Manav, Poşet vb."
+                placeholderTextColor="#94A3B8"
+                value={manualTitle}
+                onChangeText={setManualTitle}
+              />
+
+              <TouchableOpacity
+                style={styles.manualAddSubmitBtn}
+                onPress={() => handleAddManualProduct()}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add-circle" color="#FFFFFF" size={20} />
+                <Text style={styles.manualAddSubmitBtnText}>Sepete Ekle</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* BİLİNMEYEN BARKOD MODALI */}
       {unknownBarcode && (
         <Modal visible transparent animationType="fade">
           <View style={styles.modalOverlay}>
@@ -242,19 +362,35 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
               </Text>
 
               <View style={styles.alertBtnGroup}>
+                {/* 1. Hızlı Fiyat Girip Sepete Ekle */}
+                <TouchableOpacity
+                  style={styles.alertQuickPriceBtn}
+                  onPress={() => {
+                    setManualTitle(`Barkodlu (${unknownBarcode})`);
+                    setManualModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="flash-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.alertQuickPriceBtnText}>Fiyat Gir ve Ekle</Text>
+                </TouchableOpacity>
+
+                {/* 2. Ürün Olarak Ekle (Yönetici/Müdür) */}
+                {role !== 'staff' && (
+                  <TouchableOpacity
+                    style={styles.alertAddProductBtn}
+                    onPress={handleUnknownAddProduct}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#10B981" />
+                    <Text style={styles.alertAddProductBtnText}>Sisteme Ürün Olarak Ekle</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* 3. Devam Et / Kapat */}
                 <TouchableOpacity
                   style={styles.alertContinueBtn}
                   onPress={() => setUnknownBarcode(null)}
                 >
-                  <Text style={styles.alertContinueBtnText}>Devam Et</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.alertAddBtn}
-                  onPress={handleUnknownAddProduct}
-                >
-                  <Ionicons name="add" color="#FFFFFF" size={18} />
-                  <Text style={styles.alertAddBtnText}>Ürün Ekle</Text>
+                  <Text style={styles.alertContinueBtnText}>Vazgeç / Kapat</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -262,96 +398,69 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         </Modal>
       )}
 
-      {/* 2. TAMAMLA / ÖDEME & PARA ÜSTÜ MODALI */}
-      <Modal
-        visible={completeModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCompleteModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paymentModalCard}>
-            <View style={styles.paymentHeader}>
-              <Text style={styles.paymentTitle}>Satışı Tamamla</Text>
-              <TouchableOpacity onPress={() => setCompleteModalVisible(false)}>
-                <Ionicons name="close" color="#64748B" size={24} />
-              </TouchableOpacity>
-            </View>
+      {/* ÖDEME / TAMAMLA MODALI */}
+      <Modal visible={completeModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.completeCard}>
+              <Text style={styles.completeTitle}>Satışı Tamamla</Text>
 
-            <View style={styles.paymentTotalBox}>
-              <Text style={styles.paymentTotalLabel}>Ödenmesi Gereken Tutar</Text>
-              <Text style={styles.paymentTotalAmount}>{totalAmount.toFixed(2)} TL</Text>
-            </View>
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryLabel}>Toplam Tutar</Text>
+                <Text style={styles.summaryTotal}>{totalAmount.toFixed(2)} TL</Text>
+              </View>
 
-            {/* Müşterinin Verdiği Para */}
-            <View style={styles.givenInputGroup}>
-              <Text style={styles.givenLabel}>Müşterinin Verdiği Para (TL)</Text>
-              <View style={styles.givenInputWrapper}>
-                <Ionicons name="cash-outline" color="#10B981" size={22} style={{ marginLeft: 12 }} />
+              <View style={styles.inputBox}>
+                <Text style={styles.inputBoxLabel}>Müşterinin Verdiği Nakit (TL)</Text>
                 <TextInput
-                  style={styles.givenInput}
+                  style={styles.cashInput}
                   placeholder="0.00"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   value={givenAmountStr}
                   onChangeText={setGivenAmountStr}
                   keyboardType="decimal-pad"
+                  autoFocus
                 />
               </View>
-            </View>
 
-            {/* Hızlı TL Butonları */}
-            <View style={styles.quickCashRow}>
-              <TouchableOpacity
-                style={styles.quickCashBtn}
-                onPress={() => setGivenAmountStr(totalAmount.toString())}
-              >
-                <Text style={styles.quickCashText}>Tam Para</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickCashBtn}
-                onPress={() => setGivenAmountStr('50')}
-              >
-                <Text style={styles.quickCashText}>50 TL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickCashBtn}
-                onPress={() => setGivenAmountStr('100')}
-              >
-                <Text style={styles.quickCashText}>100 TL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickCashBtn}
-                onPress={() => setGivenAmountStr('200')}
-              >
-                <Text style={styles.quickCashText}>200 TL</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={[styles.changeBox, changeAmount > 0 && styles.changeBoxPositive]}>
+                <Text style={styles.changeLabel}>Para Üstü</Text>
+                <Text style={styles.changeValue}>{changeAmount.toFixed(2)} TL</Text>
+              </View>
 
-            {/* Para Üstü Hesabı */}
-            <View style={styles.changeCard}>
-              <Text style={styles.changeLabel}>Verilecek Para Üstü:</Text>
-              <Text style={styles.changeAmountText}>{changeAmount.toFixed(2)} TL</Text>
-            </View>
+              <View style={styles.completeBtnRow}>
+                <TouchableOpacity
+                  style={styles.cancelSaleBtn}
+                  onPress={() => {
+                    setCompleteModalVisible(false);
+                    setGivenAmountStr('');
+                  }}
+                  disabled={isSavingSale}
+                >
+                  <Text style={styles.cancelSaleBtnText}>Vazgeç</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.finishSaleBtn}
-              onPress={handleFinishSale}
-              disabled={isSavingSale}
-            >
-              {isSavingSale ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" color="#FFFFFF" size={20} />
-                  <Text style={styles.finishSaleBtnText}>Hesabı Tamamla & Temizle</Text>
-                </>
-              )}
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmSaleBtn,
+                    (givenAmount < totalAmount || isSavingSale) && styles.disabledConfirmBtn,
+                  ]}
+                  onPress={handleFinishSale}
+                  disabled={givenAmount < totalAmount || isSavingSale}
+                >
+                  {isSavingSale ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.confirmSaleBtnText}>Satışı Onayla</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Barkod Okuma Modalı */}
+      {/* Barkod Tarayıcı Modalı */}
       <BarcodeScannerModal
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
@@ -364,8 +473,8 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
+    backgroundColor: '#F8FAFC',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -390,20 +499,48 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0F172A',
   },
-  clearBtn: {
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerManualBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  headerManualBtnText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#B45309',
+  },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   clearBtnText: {
-    color: '#EF4444',
+    color: '#DC2626',
+    fontWeight: 'bold',
     fontSize: 13,
-    fontWeight: '600',
   },
   whiteCanvas: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
   },
   emptyCanvas: {
     flex: 1,
@@ -414,132 +551,153 @@ const styles = StyleSheet.create({
   emptyCanvasTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#64748B',
-    marginTop: 16,
+    color: '#334155',
+    marginTop: 12,
   },
   emptyCanvasText: {
     fontSize: 14,
     color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
     lineHeight: 20,
   },
   cartListContent: {
-    padding: 16,
-    gap: 12,
+    padding: 12,
+    gap: 8,
   },
   cartItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
+    borderColor: '#F1F5F9',
   },
   itemImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: '#E2E8F0',
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+    resizeMode: 'cover',
   },
   itemNoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 10,
   },
   itemDetails: {
     flex: 1,
   },
   itemName: {
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#0F172A',
   },
   itemBarcode: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
     marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   itemPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#10B981',
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginRight: 12,
   },
   deleteRowBtn: {
-    padding: 8,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bottomSection: {
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    padding: 16,
-    elevation: 8,
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
+    elevation: 6,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
+    alignItems: 'baseline',
+    marginBottom: 16,
   },
   totalLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#475569',
   },
   totalValue: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: '900',
     color: '#0F172A',
   },
   actionButtonGroup: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   greenAddButton: {
     flex: 1,
-    backgroundColor: '#10B981',
-    borderRadius: 14,
-    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 6,
   },
   greenAddButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontSize: 15,
+    fontWeight: 'bold',
   },
-  completeButton: {
+  amberManualButton: {
     flex: 1,
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: '#D97706',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 6,
+  },
+  amberManualButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  completeButton: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 6,
   },
   disabledCompleteButton: {
     backgroundColor: '#CBD5E1',
   },
   completeButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
@@ -547,6 +705,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  manualModalBox: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  manualModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  manualModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  manualModalSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  manualInputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  manualPriceInput: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#92400E',
+    marginBottom: 14,
+  },
+  manualDescInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0F172A',
+    marginBottom: 20,
+  },
+  manualAddSubmitBtn: {
+    backgroundColor: '#D97706',
+    paddingVertical: 14,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  manualAddSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   alertBox: {
     width: '100%',
@@ -566,158 +795,167 @@ const styles = StyleSheet.create({
   },
   alertTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: 'bold',
     color: '#0F172A',
+    marginBottom: 8,
   },
   alertDesc: {
     fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 24,
     lineHeight: 20,
+    marginBottom: 20,
   },
   alertBtnGroup: {
-    flexDirection: 'row',
-    gap: 12,
     width: '100%',
+    gap: 10,
   },
-  alertContinueBtn: {
-    flex: 1,
-    paddingVertical: 12,
+  alertQuickPriceBtn: {
+    backgroundColor: '#D97706',
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-  },
-  alertContinueBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  alertAddBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#10B981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
   },
-  alertAddBtnText: {
+  alertQuickPriceBtnText: {
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#FFFFFF',
   },
-  paymentModalCard: {
+  alertAddProductBtn: {
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  alertAddProductBtnText: {
+    color: '#059669',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  alertContinueBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  alertContinueBtnText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  completeCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
   },
-  paymentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  paymentTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+  completeTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#0F172A',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  paymentTotalBox: {
+  summaryBox: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 20,
-  },
-  paymentTotalLabel: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  paymentTotalAmount: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#10B981',
-  },
-  givenInputGroup: {
     marginBottom: 16,
   },
-  givenLabel: {
+  summaryLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  summaryTotal: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginTop: 4,
+  },
+  inputBox: {
+    marginBottom: 16,
+  },
+  inputBoxLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#334155',
     marginBottom: 6,
   },
-  givenInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cashInput: {
     backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#10B981',
-    borderRadius: 12,
-  },
-  givenInput: {
-    flex: 1,
-    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#0F172A',
+    textAlign: 'center',
   },
-  quickCashRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  quickCashBtn: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  quickCashText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  changeCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
+  changeBox: {
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
     padding: 16,
+    alignItems: 'center',
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  changeBoxPositive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
   },
   changeLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#047857',
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
   },
-  changeAmountText: {
-    fontSize: 22,
+  changeValue: {
+    fontSize: 24,
     fontWeight: '900',
-    color: '#047857',
+    color: '#059669',
+    marginTop: 4,
   },
-  finishSaleBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 14,
-    paddingVertical: 16,
+  completeBtnRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    gap: 12,
   },
-  finishSaleBtnText: {
+  cancelSaleBtn: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  cancelSaleBtnText: {
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  confirmSaleBtn: {
+    flex: 2,
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  disabledConfirmBtn: {
+    backgroundColor: '#CBD5E1',
+  },
+  confirmSaleBtnText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: 'bold',
   },
 });

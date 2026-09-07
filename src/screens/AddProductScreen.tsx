@@ -24,16 +24,30 @@ interface AddProductScreenProps {
   initialBarcode?: string;
 }
 
+const PRESET_CATEGORIES = [
+  'Genel',
+  'Gıda',
+  'İçecek',
+  'Atıştırmalık',
+  'Temizlik',
+  'Kırtasiye',
+  'Kozmetik',
+  'Teknoloji',
+];
+
 export const AddProductScreen: React.FC<AddProductScreenProps> = ({
   onBack,
   initialBarcode = '',
 }) => {
-  const { addProduct } = useStore();
+  const { addProduct, products } = useStore();
 
   const [name, setName] = useState<string>('');
   const [barcode, setBarcode] = useState<string>(initialBarcode);
   const [buyPrice, setBuyPrice] = useState<string>('');
   const [sellPrice, setSellPrice] = useState<string>('');
+  const [category, setCategory] = useState<string>('Genel');
+  const [customCategory, setCustomCategory] = useState<string>('');
+  const [brand, setBrand] = useState<string>('');
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   const [scannerVisible, setScannerVisible] = useState<boolean>(false);
@@ -44,6 +58,14 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
       setBarcode(initialBarcode);
     }
   }, [initialBarcode]);
+
+  // Mevcut ürünlerden benzersiz kategorileri topla
+  const existingCategories = Array.from(
+    new Set([
+      ...PRESET_CATEGORIES,
+      ...products.map((p) => p.category).filter(Boolean),
+    ])
+  ) as string[];
 
   const handlePickImage = async (useCamera: boolean) => {
     try {
@@ -91,21 +113,19 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
   };
 
   const handleSave = async () => {
+    // Sadece Ürün Adı ve Satış Fiyatı zorunlu
     if (!name.trim()) {
-      Alert.alert('Eksik Bilgi', 'Lütfen ürün adını giriniz.');
-      return;
-    }
-    if (!barcode.trim()) {
-      Alert.alert('Eksik Bilgi', 'Lütfen barkod numarasını giriniz veya taratınız.');
+      Alert.alert('Eksik Bilgi ⚠️', 'Lütfen ürün adını giriniz.');
       return;
     }
     if (!sellPrice.trim() || isNaN(Number(sellPrice))) {
-      Alert.alert('Eksik Bilgi', 'Lütfen geçerli bir satış fiyatı giriniz.');
+      Alert.alert('Eksik Bilgi ⚠️', 'Lütfen geçerli bir satış fiyatı giriniz.');
       return;
     }
 
-    const parsedBuyPrice = buyPrice.trim() ? Number(buyPrice) : 0;
+    const parsedBuyPrice = buyPrice.trim() && !isNaN(Number(buyPrice)) ? Number(buyPrice) : 0;
     const parsedSellPrice = Number(sellPrice);
+    const finalCategory = customCategory.trim() || category || 'Genel';
 
     setIsSubmitting(true);
 
@@ -115,6 +135,8 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
         name: name.trim(),
         buy_price: parsedBuyPrice,
         sell_price: parsedSellPrice,
+        category: finalCategory,
+        brand: brand.trim() || null,
       },
       imageUri
     );
@@ -122,11 +144,11 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
     setIsSubmitting(false);
 
     if (res.success) {
-      Alert.alert('Başarılı! 🎉', `"${name.trim()}" ürünü sisteme eklendi.`, [
+      Alert.alert('Başarılı! 🎉', `"${name.trim()}" ürünü başarıyla eklendi.`, [
         { text: 'Tamam', onPress: onBack },
       ]);
     } else {
-      Alert.alert('Hata', res.error || 'Ürün kaydedilirken bir hata oluştu.');
+      Alert.alert('Hata ⚠️', res.error || 'Ürün kaydedilirken bir hata oluştu.');
     }
   };
 
@@ -138,12 +160,12 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Sol Üst 44x44 Geri Tuşu ve Başlık */}
+        {/* Üst Bar */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
             <Ionicons name="arrow-back" color="#0F172A" size={24} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ürün Ekle</Text>
+          <Text style={styles.headerTitle}>Yeni Ürün Ekle</Text>
           <View style={{ width: 44 }} />
         </View>
 
@@ -151,108 +173,185 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
           {/* Fotoğraf Seçim Alanı */}
           <View style={styles.imageSection}>
             {imageUri ? (
-              <View style={styles.previewContainer}>
+              <View style={styles.imagePreviewWrapper}>
                 <Image source={{ uri: imageUri }} style={styles.imagePreview} />
                 <TouchableOpacity
-                  style={styles.changeImageBtn}
+                  style={styles.removeImageBtn}
                   onPress={() => setImageUri(null)}
                 >
-                  <Ionicons name="trash-outline" color="#EF4444" size={16} />
-                  <Text style={styles.changeImageBtnText}>Kaldır / Değiştir</Text>
+                  <Ionicons name="trash" color="#FFFFFF" size={18} />
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.imagePlaceholder}>
-                <View style={styles.placeholderIconBadge}>
-                  <Ionicons name="camera-outline" color="#10B981" size={36} />
-                </View>
-                <Text style={styles.imagePlaceholderText}>Ürün Fotoğrafı Ekleyin</Text>
-                <View style={styles.imageBtnGroup}>
-                  <TouchableOpacity
-                    style={[styles.photoBtn, styles.cameraPhotoBtn]}
-                    onPress={() => handlePickImage(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="camera" color="#047857" size={20} />
-                    <Text style={styles.cameraPhotoBtnText}>Fotoğraf Çek</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.photoBtn, styles.galleryPhotoBtn]}
-                    onPress={() => handlePickImage(false)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="images" color="#1D4ED8" size={20} />
-                    <Text style={styles.galleryPhotoBtnText}>Galeriden Seç</Text>
-                  </TouchableOpacity>
-                </View>
+                <Ionicons name="image-outline" size={48} color="#94A3B8" />
+                <Text style={styles.imagePlaceholderText}>Ürün Fotoğrafı (İsteğe Bağlı)</Text>
               </View>
             )}
+
+            <View style={styles.imageButtonsRow}>
+              <TouchableOpacity
+                style={styles.imageActionBtn}
+                onPress={() => handlePickImage(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="camera" color="#059669" size={20} />
+                <Text style={styles.imageActionBtnText}>Fotoğraf Çek</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.imageActionBtn, styles.galleryBtn]}
+                onPress={() => handlePickImage(false)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="images" color="#2563EB" size={20} />
+                <Text style={[styles.imageActionBtnText, { color: '#2563EB' }]}>Galeriden Seç</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Form Alanları */}
           <View style={styles.formCard}>
+            {/* Ürün Adı (ZORUNLU) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Ürün Adı *</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Ürün Adı *</Text>
+                <Text style={styles.requiredBadge}>Zorunlu</Text>
+              </View>
               <TextInput
                 style={styles.input}
-                placeholder="Örn: Çay 1KG, Kırmızı Tişört vb."
-                placeholderTextColor="#9CA3AF"
+                placeholder="Örn: 12'li Kuru Boya, Çay vb."
+                placeholderTextColor="#94A3B8"
                 value={name}
                 onChangeText={setName}
               />
             </View>
 
+            {/* Barkod (OPSİYONEL - Boş bırakılırsa otomatik üretilir) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Barkod No *</Text>
-              <View style={styles.barcodeInputWrapper}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Barkod Numarası</Text>
+                <Text style={styles.optionalBadge}>Boşsa Otomatik Üretilir</Text>
+              </View>
+              <View style={styles.barcodeInputRow}>
                 <TextInput
-                  style={[styles.input, styles.barcodeInput]}
-                  placeholder="Barkod Okutun veya Elle Girin..."
-                  placeholderTextColor="#9CA3AF"
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Barkod okutun veya boş bırakın"
+                  placeholderTextColor="#94A3B8"
                   value={barcode}
                   onChangeText={setBarcode}
                   keyboardType="numeric"
                 />
                 <TouchableOpacity
-                  style={styles.scanButton}
+                  style={styles.scanBarcodeBtn}
                   onPress={() => setScannerVisible(true)}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="qr-code" color="#FFFFFF" size={22} />
+                  <Ionicons name="barcode-outline" color="#FFFFFF" size={22} />
                 </TouchableOpacity>
               </View>
             </View>
 
+            {/* Fiyat Alanları (Satış ZORUNLU, Geliş OPSİYONEL) */}
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Geliş Fiyatı (TL)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  placeholderTextColor="#9CA3AF"
-                  value={buyPrice}
-                  onChangeText={setBuyPrice}
-                  keyboardType="decimal-pad"
-                />
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Geliş Fiyatı</Text>
+                  <Text style={styles.optionalBadge}>Opsiyonel</Text>
+                </View>
+                <View style={styles.priceInputWrapper}>
+                  <TextInput
+                    style={styles.priceInput}
+                    placeholder="0.00"
+                    placeholderTextColor="#94A3B8"
+                    value={buyPrice}
+                    onChangeText={setBuyPrice}
+                    keyboardType="decimal-pad"
+                  />
+                  <Text style={styles.currencySuffix}>TL</Text>
+                </View>
               </View>
 
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Satış Fiyatı (TL) *</Text>
-                <TextInput
-                  style={[styles.input, styles.sellInput]}
-                  placeholder="0.00"
-                  placeholderTextColor="#9CA3AF"
-                  value={sellPrice}
-                  onChangeText={setSellPrice}
-                  keyboardType="decimal-pad"
-                />
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Satış Fiyatı *</Text>
+                  <Text style={styles.requiredBadge}>Zorunlu</Text>
+                </View>
+                <View style={[styles.priceInputWrapper, styles.sellPriceWrapper]}>
+                  <TextInput
+                    style={[styles.priceInput, { color: '#059669' }]}
+                    placeholder="0.00"
+                    placeholderTextColor="#94A3B8"
+                    value={sellPrice}
+                    onChangeText={setSellPrice}
+                    keyboardType="decimal-pad"
+                  />
+                  <Text style={[styles.currencySuffix, { color: '#059669' }]}>TL</Text>
+                </View>
               </View>
+            </View>
+
+            {/* Marka (OPSİYONEL) */}
+            <View style={styles.inputGroup}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Marka</Text>
+                <Text style={styles.optionalBadge}>Opsiyonel</Text>
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Örn: Fatih, Eti, Ülker, Faber-Castell"
+                placeholderTextColor="#94A3B8"
+                value={brand}
+                onChangeText={setBrand}
+              />
+            </View>
+
+            {/* Kategori Seçimi & Yeni Kategori (OPSİYONEL) */}
+            <View style={styles.inputGroup}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Kategori</Text>
+                <Text style={styles.optionalBadge}>Opsiyonel</Text>
+              </View>
+
+              {/* Kategori Etiketleri (Hızlı Seçim) */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryPills}
+              >
+                {existingCategories.map((cat) => {
+                  const isSelected = category === cat && !customCategory.trim();
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.catPill, isSelected && styles.catPillActive]}
+                      onPress={() => {
+                        setCategory(cat);
+                        setCustomCategory('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Yeni Özel Kategori Girişi */}
+              <TextInput
+                style={[styles.input, { marginTop: 10 }]}
+                placeholder="Veya yeni kategori adı yazın..."
+                placeholderTextColor="#94A3B8"
+                value={customCategory}
+                onChangeText={setCustomCategory}
+              />
             </View>
 
             {/* Kaydet Butonu */}
             <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+              style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
               onPress={handleSave}
               disabled={isSubmitting}
               activeOpacity={0.85}
@@ -260,25 +359,25 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <View style={styles.btnContent}>
+                <>
                   <Ionicons name="checkmark-circle" color="#FFFFFF" size={22} />
-                  <Text style={styles.submitButtonText}>Ürünü Kaydet</Text>
-                </View>
+                  <Text style={styles.saveButtonText}>Ürünü Kaydet</Text>
+                </>
               )}
             </TouchableOpacity>
           </View>
         </ScrollView>
-
-        {/* Barkod Okuma Modalı */}
-        <BarcodeScannerModal
-          visible={scannerVisible}
-          onClose={() => setScannerVisible(false)}
-          onBarcodeScanned={(scannedCode) => {
-            setBarcode(scannedCode);
-            setScannerVisible(false);
-          }}
-        />
       </KeyboardAvoidingView>
+
+      {/* Barkod Okuma Modalı */}
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onBarcodeScanned={(scanned) => {
+          setScannerVisible(false);
+          setBarcode(scanned);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -287,7 +386,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -317,91 +416,81 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   imageSection: {
-    marginBottom: 20,
-  },
-  previewContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  imagePreview: {
+  imagePreviewWrapper: {
+    position: 'relative',
     width: 140,
     height: 140,
-    borderRadius: 20,
-    backgroundColor: '#E2E8F0',
-    borderWidth: 2,
-    borderColor: '#10B981',
-  },
-  changeImageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 10,
-  },
-  changeImageBtnText: {
-    color: '#EF4444',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  imagePlaceholder: {
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderStyle: 'dashed',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  placeholderIconBadge: {
-    width: 60,
-    height: 60,
     borderRadius: 16,
-    backgroundColor: '#ECFDF5',
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+  },
+  imagePlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
   },
   imagePlaceholderText: {
-    color: '#475569',
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 16,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 6,
+    fontWeight: '500',
   },
-  imageBtnGroup: {
+  imageButtonsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     width: '100%',
   },
-  photoBtn: {
+  imageActionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  cameraPhotoBtn: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
-  cameraPhotoBtnText: {
-    color: '#065F46',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  galleryPhotoBtn: {
-    backgroundColor: '#DBEAFE',
-    borderWidth: 1,
+  galleryBtn: {
+    backgroundColor: '#EFF6FF',
     borderColor: '#BFDBFE',
   },
-  galleryPhotoBtnText: {
-    color: '#1E40AF',
-    fontWeight: 'bold',
-    fontSize: 14,
+  imageActionBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
   },
   formCard: {
     backgroundColor: '#FFFFFF',
@@ -409,80 +498,140 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
-    gap: 16,
   },
   inputGroup: {
-    gap: 6,
+    marginBottom: 16,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   label: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#334155',
+  },
+  requiredBadge: {
+    fontSize: 11,
+    color: '#DC2626',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: '600',
+  },
+  optionalBadge: {
+    fontSize: 11,
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: '500',
   },
   input: {
     backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     color: '#0F172A',
   },
-  barcodeInputWrapper: {
+  barcodeInputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
   },
-  barcodeInput: {
-    flex: 1,
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  scanButton: {
+  scanBarcodeBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: '#10B981',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
   },
-  sellInput: {
-    borderColor: '#10B981',
+  priceInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  sellPriceWrapper: {
+    borderColor: '#A7F3D0',
     backgroundColor: '#F0FDF4',
+  },
+  priceInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  currencySuffix: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#64748B',
+    marginLeft: 4,
+  },
+  categoryPills: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  catPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  catPillActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  catPillText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  catPillTextActive: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
-  submitButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 14,
-    paddingVertical: 16,
+  saveButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
     marginTop: 8,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 3,
   },
-  disabledButton: {
-    opacity: 0.6,
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
-  btnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  submitButtonText: {
+  saveButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',

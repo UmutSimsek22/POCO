@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - pocoV2up
+      - pocoV3
+      - pocoV3up
+      - 'v3*'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -59,28 +62,30 @@ jobs:
       - name: 📋 APK Dosyasını Hazırla
         run: |
           mkdir -p build_output
-          cp android/app/build/outputs/apk/release/app-release.apk build_output/POCO-v2.0.apk
+          cp android/app/build/outputs/apk/release/app-release.apk build_output/POCO-v3.0.apk
 
       - name: 📦 Actions Sayfasına APK'yı Yükle (Doğrudan İndirme)
         uses: actions/upload-artifact@v4
         with:
-          name: POCO-v2.0-apk
-          path: build_output/POCO-v2.0.apk
+          name: POCO-v3.0-apk
+          path: build_output/POCO-v3.0.apk
 
-      - name: 🚀 GitHub Release İle APK Yayınla (v2.0.0)
+      - name: 🚀 GitHub Release İle APK Yayınla (v3.0.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== GitHub Release v2.0.0 Yayınlanıyor ==="
-          gh release delete v2.0.0 --yes || true
+          echo "=== GitHub Release v3.0.0 Yayınlanıyor ==="
+          gh release delete v3.0.0 --yes || true
           
-          gh release create v2.0.0 build_output/POCO-v2.0.apk \
-            --title "POCO Mobil Barkod & Kasa APK (v2.0.0)" \
-            --notes "🎉 **POCO v2.0.0 Standalone Android APK İndirme Bağlantısı**
+          gh release create v3.0.0 build_output/POCO-v3.0.apk \
+            --title "POCO Mobil Barkod & Kasa APK (v3.0.0)" \
+            --notes "🎉 **POCO v3.0.0 Standalone Android APK İndirme Bağlantısı**
 
-          ### 🚀 Bu Sürümdeki Yenilikler (POCO v2):
-          - 🖼️ **Tüm İkonlar Yenilendi:** Geri oku, çıkış, büyüteç, artı, kasa ve QR kod simgeleri net ve renkli hale getirildi.
-          - 📱 **Ekran Taşıntısı Düzeltildi:** Durum çubuğu (Status Bar / Çentik) güvenli alan boşluğu eklendi, butonlar 44x44px geniş dokunmatik kartlara yükseltildi.
-          - 🔍 **Ürün Detay Modalı Kapanma Deneyimi:** Sorgulama kartının altına büyük **'Tamam / Listeye Dön'** butonu ve arka plana dokunarak kapatma eklendi.
-          - 📸 **Kamera İle Ürün Fotoğrafı Çekme:** Ürün eklerken doğrudan kameradan 1:1 fotoğraf çekme özelliği aktif edildi.
-          - ⚡ **Hızlı Kamera Kısayolu:** Ana ekrana doğrudan barkod tarayıcıyı açan hızlı kamera butonu eklendi."
+          ### 🚀 Bu Sürümdeki Yenilikler (POCO v3.0):
+          - 👥 **Rol Tabanlı Yetkilendirme (RBAC):** Yönetici (Admin), Müdür ve Kasiyer rolleri.
+          - 🔒 **Geliş Fiyatı & Kâr Marjı Gizleme:** Kasiyer rolüyle girildiğinde maliyet verileri tamamen gizlendi.
+          - 📝 **Ürün Düzenleme & Güvenli Silme:** Ürün düzenleme modalı ve soft-delete silme koruması eklendi.
+          - 🏷️ **Kategori & Marka Desteği:** Esnek ürün şeması (sadece Ad ve Satış Fiyatı zorunlu, diğerleri opsiyonel) ve kategori filtre çipleri.
+          - 🛒 **Kasada Hızlı / Manuel Tutar:** Sistemde olmayan ürünler için kasaya anında tutar girme (+ Manuel Tutar) butonu.
+          - 🎯 **Barkod Odaklama (ROI):** Barkod okuyucu kamera sadece ortadaki yeşil hedef kutusu içindeki barkodları okur.
+          - 🖼️ **Görsel Desteği & Supabase Migration:** Storage izinleri ve görsel render fallback'leri güçlendirildi."

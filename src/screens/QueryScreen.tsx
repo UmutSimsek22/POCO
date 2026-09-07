@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,12 +6,16 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Image,
   Modal,
+  Image,
   SafeAreaView,
-  Platform,
   StatusBar,
   TouchableWithoutFeedback,
+  Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
@@ -23,18 +27,57 @@ interface QueryScreenProps {
 }
 
 export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
-  const { products } = useStore();
+  const { products, role, updateProduct, deleteProduct } = useStore();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [scannerVisible, setScannerVisible] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [scannerVisible, setScannerVisible] = useState<boolean>(false);
 
-  // Arama filtrelemesi (Ad veya Barkod no)
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.barcode.includes(searchQuery)
-  );
+  // Düzenleme (Edit) Modalı State'leri
+  const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
+  const [editName, setEditName] = useState<string>('');
+  const [editBarcode, setEditBarcode] = useState<string>('');
+  const [editBuyPrice, setEditBuyPrice] = useState<string>('');
+  const [editSellPrice, setEditSellPrice] = useState<string>('');
+  const [editCategory, setEditCategory] = useState<string>('');
+  const [editBrand, setEditBrand] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+
+  // Görsel yükleme hatası olan URL'leri takip et
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  // Mevcut kategorileri topla
+  const categories = useMemo(() => {
+    const cats = new Set<string>(['Tümü']);
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) {
+        cats.add(p.category.trim());
+      }
+    });
+    return Array.from(cats);
+  }, [products]);
+
+  // Arama ve Kategori Filtreleme
+  const filteredProducts = useMemo(() => {
+    let result = products;
+
+    if (selectedCategory !== 'Tümü') {
+      result = result.filter((p) => (p.category || 'Genel') === selectedCategory);
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    if (query) {
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          p.barcode.toLowerCase().includes(query) ||
+          (p.brand && p.brand.toLowerCase().includes(query))
+      );
+    }
+
+    return result;
+  }, [products, searchQuery, selectedCategory]);
 
   const handleBarcodeScanned = (scannedCode: string) => {
     setScannerVisible(false);
@@ -45,17 +88,82 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
     }
   };
 
-  const calculateProfit = (buy: number, sell: number) => {
-    const profit = sell - buy;
-    const margin = buy > 0 ? ((profit / buy) * 100).toFixed(1) : '100';
-    return { profit, margin };
+  // Düzenleme Başlat
+  const handleOpenEdit = () => {
+    if (!selectedProduct) return;
+    setEditName(selectedProduct.name);
+    setEditBarcode(selectedProduct.barcode);
+    setEditBuyPrice(selectedProduct.buy_price.toString());
+    setEditSellPrice(selectedProduct.sell_price.toString());
+    setEditCategory(selectedProduct.category || 'Genel');
+    setEditBrand(selectedProduct.brand || '');
+    setEditModalVisible(true);
   };
+
+  // Düzenlemeyi Kaydet
+  const handleSaveEdit = async () => {
+    if (!selectedProduct) return;
+    if (!editName.trim() || !editSellPrice.trim()) {
+      Alert.alert('Eksik Bilgi', 'Ürün adı ve satış fiyatı zorunludur.');
+      return;
+    }
+
+    setIsUpdating(true);
+    const res = await updateProduct(selectedProduct.id, {
+      name: editName.trim(),
+      barcode: editBarcode.trim() || selectedProduct.barcode,
+      buy_price: Number(editBuyPrice) || 0,
+      sell_price: Number(editSellPrice),
+      category: editCategory.trim() || 'Genel',
+      brand: editBrand.trim() || null,
+    });
+    setIsUpdating(false);
+
+    if (res.success && res.product) {
+      setSelectedProduct(res.product);
+      setEditModalVisible(false);
+      Alert.alert('Başarılı! 🎉', 'Ürün bilgileri güncellendi.');
+    } else {
+      Alert.alert('Hata', res.error || 'Ürün güncellenirken hata oluştu.');
+    }
+  };
+
+  // Ürünü Sil (Yalnızca Admin)
+  const handleDeleteProduct = () => {
+    if (!selectedProduct) return;
+    Alert.alert(
+      'Ürünü Sil ⚠️',
+      `"${selectedProduct.name}" ürününü mağazanızdan silmek istediğinize emin misiniz?`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Evet, Sil',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await deleteProduct(selectedProduct.id);
+            if (res.success) {
+              setSelectedProduct(null);
+              Alert.alert('Silindi', 'Ürün listeden kaldırıldı.');
+            } else {
+              Alert.alert('Hata', res.error || 'Ürün silinemedi.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Kâr Marjı Hesabı
+  const buyPrice = selectedProduct?.buy_price || 0;
+  const sellPrice = selectedProduct?.sell_price || 0;
+  const profit = sellPrice - buyPrice;
+  const profitMargin = sellPrice > 0 ? (profit / sellPrice) * 100 : 0;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Sol Üst 44x44 Geri Tuşu & Başlık */}
+      {/* Üst Bar */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" color="#0F172A" size={24} />
@@ -64,22 +172,23 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Arama Alanı & Barkod Okut Butonu */}
+      {/* Arama Alanı */}
       <View style={styles.searchSection}>
-        <View style={styles.searchInputWrapper}>
-          <Ionicons name="search" color="#94A3B8" size={22} style={styles.searchIcon} />
+        <View style={styles.searchBar}>
+          <Ionicons name="search" color="#94A3B8" size={20} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Ürün adı veya barkod ile ara..."
-            placeholderTextColor="#9CA3AF"
+            placeholder="İsim, marka veya barkod ara..."
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
           />
-          {searchQuery ? (
+          {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
-              <Ionicons name="close-circle" color="#94A3B8" size={20} />
+              <Ionicons name="close-circle" color="#94A3B8" size={18} />
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
 
         <TouchableOpacity
@@ -87,22 +196,35 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           onPress={() => setScannerVisible(true)}
           activeOpacity={0.8}
         >
-          <Ionicons name="qr-code" color="#FFFFFF" size={22} />
+          <Ionicons name="barcode-outline" color="#059669" size={24} />
         </TouchableOpacity>
+      </View>
+
+      {/* Kategori Filtre Çipleri */}
+      <View style={styles.categoryScrollWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChips}>
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.chip, isSelected && styles.chipActive]}
+                onPress={() => setSelectedCategory(cat)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Ürün Listesi */}
       {filteredProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconBadge}>
-            <Ionicons name="cube-outline" color="#94A3B8" size={48} />
-          </View>
+          <Ionicons name="search-outline" color="#CBD5E1" size={64} />
           <Text style={styles.emptyTitle}>Ürün Bulunamadı</Text>
-          <Text style={styles.emptyText}>
-            {searchQuery
-              ? `"${searchQuery}" ile eşleşen ürün kalemi yok.`
-              : 'Henüz mağazanıza eklenmiş ürün bulunmuyor.'}
-          </Text>
+          <Text style={styles.emptySubtitle}>Arama kriterlerinize uygun ürün bulunmuyor.</Text>
         </View>
       ) : (
         <FlatList
@@ -110,40 +232,54 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }: { item: Product }) => (
-            <TouchableOpacity
-              style={styles.productCard}
-              onPress={() => setSelectedProduct(item)}
-              activeOpacity={0.7}
-            >
-              {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={styles.productThumb} />
-              ) : (
-                <View style={styles.noThumb}>
-                  <Ionicons name="cube-outline" color="#94A3B8" size={24} />
-                </View>
-              )}
+          renderItem={({ item }: { item: Product }) => {
+            const hasValidImage = item.image_url && !failedImages[item.image_url];
+            return (
+              <TouchableOpacity
+                style={styles.productCard}
+                onPress={() => setSelectedProduct(item)}
+                activeOpacity={0.7}
+              >
+                {hasValidImage ? (
+                  <Image
+                    source={{ uri: item.image_url! }}
+                    style={styles.productThumb}
+                    onError={() => setFailedImages((prev) => ({ ...prev, [item.image_url!]: true }))}
+                  />
+                ) : (
+                  <View style={styles.noThumb}>
+                    <Ionicons name="cube-outline" color="#94A3B8" size={24} />
+                  </View>
+                )}
 
-              <View style={styles.productInfo}>
-                <Text style={styles.productName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={styles.barcodeBadge}>
-                  <Ionicons name="pricetag-outline" color="#64748B" size={12} />
-                  <Text style={styles.barcodeText}>{item.barcode}</Text>
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <View style={styles.badgesRow}>
+                    <View style={styles.barcodeBadge}>
+                      <Ionicons name="pricetag-outline" color="#64748B" size={12} />
+                      <Text style={styles.barcodeText}>{item.barcode}</Text>
+                    </View>
+                    {item.brand && (
+                      <View style={styles.brandBadge}>
+                        <Text style={styles.brandBadgeText}>{item.brand}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.priceContainer}>
-                <Text style={styles.sellPriceText}>{item.sell_price.toFixed(2)} TL</Text>
-                <Ionicons name="chevron-forward" color="#CBD5E1" size={18} />
-              </View>
-            </TouchableOpacity>
-          )}
+                <View style={styles.priceContainer}>
+                  <Text style={styles.sellPriceText}>{item.sell_price.toFixed(2)} TL</Text>
+                  <Ionicons name="chevron-forward" color="#CBD5E1" size={18} />
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
 
-      {/* Ürün Detay Modalı (Dışarı dokunarak & Kapat butonuyla çıkış) */}
+      {/* Ürün Detay Modalı */}
       {selectedProduct && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setSelectedProduct(null)}>
           <TouchableWithoutFeedback onPress={() => setSelectedProduct(null)}>
@@ -159,10 +295,14 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
                     <Ionicons name="close" color="#475569" size={22} />
                   </TouchableOpacity>
 
-                  {selectedProduct.image_url ? (
+                  {/* Görsel veya Kutu İkonu */}
+                  {selectedProduct.image_url && !failedImages[selectedProduct.image_url] ? (
                     <Image
                       source={{ uri: selectedProduct.image_url }}
                       style={styles.detailImage}
+                      onError={() =>
+                        setFailedImages((prev) => ({ ...prev, [selectedProduct.image_url!]: true }))
+                      }
                     />
                   ) : (
                     <View style={styles.detailNoImage}>
@@ -172,53 +312,101 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
 
                   <Text style={styles.detailName}>{selectedProduct.name}</Text>
 
-                  <View style={styles.detailBarcodeBadge}>
-                    <Ionicons name="pricetag" color="#10B981" size={14} />
-                    <Text style={styles.detailBarcodeText}>{selectedProduct.barcode}</Text>
+                  <View style={styles.detailBadges}>
+                    <View style={styles.detailBarcodeBadge}>
+                      <Ionicons name="pricetag" color="#10B981" size={14} />
+                      <Text style={styles.detailBarcodeText}>{selectedProduct.barcode}</Text>
+                    </View>
+                    {selectedProduct.brand && (
+                      <View style={styles.detailBrandBadge}>
+                        <Text style={styles.detailBrandText}>{selectedProduct.brand}</Text>
+                      </View>
+                    )}
+                    <View style={styles.detailCatBadge}>
+                      <Text style={styles.detailCatText}>{selectedProduct.category || 'Genel'}</Text>
+                    </View>
                   </View>
 
                   <View style={styles.detailDivider} />
 
-                  <View style={styles.detailPricesGrid}>
-                    <View style={styles.detailPriceItem}>
-                      <Text style={styles.detailPriceLabel}>Geliş Fiyatı</Text>
-                      <Text style={styles.detailBuyPrice}>
-                        {selectedProduct.buy_price.toFixed(2)} TL
-                      </Text>
+                  {/* Fiyat Kutuları (Kasiyerde Geliş Fiyatı ve Kâr GİZLENİR) */}
+                  {role === 'staff' ? (
+                    <View style={styles.staffPriceBox}>
+                      <Text style={styles.staffPriceLabel}>Satış Fiyatı</Text>
+                      <Text style={styles.staffPriceValue}>{sellPrice.toFixed(2)} TL</Text>
                     </View>
+                  ) : (
+                    <>
+                      <View style={styles.pricesRow}>
+                        <View style={styles.priceBox}>
+                          <Text style={styles.priceBoxLabel}>Geliş Fiyatı</Text>
+                          <Text style={styles.priceBoxValue}>{buyPrice.toFixed(2)} TL</Text>
+                        </View>
+                        <View style={[styles.priceBox, styles.sellBox]}>
+                          <Text style={[styles.priceBoxLabel, { color: '#047857' }]}>Satış Fiyatı</Text>
+                          <Text style={[styles.priceBoxValue, { color: '#059669' }]}>
+                            {sellPrice.toFixed(2)} TL
+                          </Text>
+                        </View>
+                      </View>
 
-                    <View style={styles.detailPriceItem}>
-                      <Text style={styles.detailPriceLabel}>Satış Fiyatı</Text>
-                      <Text style={styles.detailSellPrice}>
-                        {selectedProduct.sell_price.toFixed(2)} TL
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Kar Marjı Hesabı */}
-                  {(() => {
-                    const { profit, margin } = calculateProfit(
-                      selectedProduct.buy_price,
-                      selectedProduct.sell_price
-                    );
-                    return (
-                      <View style={styles.profitCard}>
-                        <Ionicons name="trending-up" color="#047857" size={20} />
-                        <Text style={styles.profitText}>
-                          Birim Kar: <Text style={styles.profitHighlight}>{profit.toFixed(2)} TL</Text> (%{margin})
+                      {/* Kâr Marjı */}
+                      <View
+                        style={[
+                          styles.profitCard,
+                          profit >= 0 ? styles.profitCardPositive : styles.profitCardNegative,
+                        ]}
+                      >
+                        <Ionicons
+                          name={profit >= 0 ? 'trending-up' : 'trending-down'}
+                          color={profit >= 0 ? '#059669' : '#DC2626'}
+                          size={20}
+                        />
+                        <Text
+                          style={[
+                            styles.profitText,
+                            profit >= 0 ? styles.profitTextPositive : styles.profitTextNegative,
+                          ]}
+                        >
+                          Birim Kâr: {profit.toFixed(2)} TL (%{profitMargin.toFixed(0)})
                         </Text>
                       </View>
-                    );
-                  })()}
+                    </>
+                  )}
 
-                  {/* BÜYÜK VE BELİRGİN KAPAT BUTONU */}
+                  {/* Yönetici & Müdür Eylemleri: Düzenle / Sil */}
+                  {role !== 'staff' && (
+                    <View style={styles.adminActionRow}>
+                      <TouchableOpacity
+                        style={styles.editActionBtn}
+                        onPress={handleOpenEdit}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="create-outline" size={18} color="#2563EB" />
+                        <Text style={styles.editActionText}>Düzenle</Text>
+                      </TouchableOpacity>
+
+                      {role === 'admin' && (
+                        <TouchableOpacity
+                          style={styles.deleteActionBtn}
+                          onPress={handleDeleteProduct}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                          <Text style={styles.deleteActionText}>Sil</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Tamam / Listeye Dön Butonu */}
                   <TouchableOpacity
-                    style={styles.modalDismissButton}
+                    style={styles.dismissBtn}
                     onPress={() => setSelectedProduct(null)}
                     activeOpacity={0.85}
                   >
                     <Ionicons name="checkmark-circle-outline" color="#FFFFFF" size={20} />
-                    <Text style={styles.modalDismissButtonText}>Tamam / Listeye Dön</Text>
+                    <Text style={styles.dismissBtnText}>Tamam / Listeye Dön</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
@@ -226,6 +414,70 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           </TouchableWithoutFeedback>
         </Modal>
       )}
+
+      {/* Ürün Düzenleme (Edit) Modalı */}
+      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.detailCard, { maxHeight: '90%' }]}>
+              <View style={styles.editModalHeader}>
+                <Text style={styles.editModalTitle}>Ürünü Düzenle</Text>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 10 }}>
+                <Text style={styles.editLabel}>Ürün Adı *</Text>
+                <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} />
+
+                <Text style={styles.editLabel}>Barkod</Text>
+                <TextInput style={styles.editInput} value={editBarcode} onChangeText={setEditBarcode} />
+
+                <View style={styles.row}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.editLabel}>Geliş Fiyatı (TL)</Text>
+                    <TextInput
+                      style={styles.editInput}
+                      value={editBuyPrice}
+                      onChangeText={setEditBuyPrice}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.editLabel}>Satış Fiyatı (TL) *</Text>
+                    <TextInput
+                      style={[styles.editInput, { color: '#059669', fontWeight: 'bold' }]}
+                      value={editSellPrice}
+                      onChangeText={setEditSellPrice}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.editLabel}>Marka</Text>
+                <TextInput style={styles.editInput} value={editBrand} onChangeText={setEditBrand} placeholder="Marka adı..." />
+
+                <Text style={styles.editLabel}>Kategori</Text>
+                <TextInput style={styles.editInput} value={editCategory} onChangeText={setEditCategory} />
+
+                <TouchableOpacity
+                  style={[styles.saveEditBtn, isUpdating && { opacity: 0.7 }]}
+                  onPress={handleSaveEdit}
+                  disabled={isUpdating}
+                  activeOpacity={0.85}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.saveEditBtnText}>Güncellemeyi Kaydet</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Barkod Okuma Modalı */}
       <BarcodeScannerModal
@@ -241,7 +493,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -268,41 +520,71 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  searchInputWrapper: {
+  searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 12,
+    height: 48,
   },
   searchIcon: {
-    marginRight: 6,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0F172A',
   },
   clearSearchBtn: {
     padding: 4,
   },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#0F172A',
-  },
   scanBtn: {
-    width: 46,
-    height: 46,
-    backgroundColor: '#10B981',
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  categoryScrollWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+  },
+  categoryChips: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  chipActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+  },
+  chipText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   listContent: {
     padding: 16,
@@ -313,47 +595,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
     shadowRadius: 6,
-    elevation: 1,
-    gap: 12,
+    elevation: 2,
   },
   productThumb: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    marginRight: 12,
+    resizeMode: 'cover',
   },
   noThumb: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 10,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
   productInfo: {
     flex: 1,
   },
   productName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#0F172A',
+    marginBottom: 4,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   barcodeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     gap: 4,
-    marginTop: 4,
   },
   barcodeText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  brandBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  brandBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   priceContainer: {
     flexDirection: 'row',
@@ -363,37 +668,30 @@ const styles = StyleSheet.create({
   sellPriceText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#10B981',
+    color: '#059669',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-  },
-  emptyIconBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    padding: 32,
+    marginTop: 40,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#334155',
-    marginBottom: 6,
+    marginTop: 12,
   },
-  emptyText: {
+  emptySubtitle: {
     fontSize: 14,
     color: '#94A3B8',
     textAlign: 'center',
+    marginTop: 6,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -404,6 +702,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
+    position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
@@ -414,25 +713,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
   },
   detailImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 20,
-    backgroundColor: '#E2E8F0',
+    width: 110,
+    height: 110,
+    borderRadius: 16,
     marginBottom: 16,
+    resizeMode: 'cover',
   },
   detailNoImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
+    width: 110,
+    height: 110,
+    borderRadius: 16,
     backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
@@ -441,96 +740,237 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   detailName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#0F172A',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  detailBadges: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   detailBarcodeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: '#ECFDF5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 6,
   },
   detailBarcodeText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#047857',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  detailBrandBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  detailBrandText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  detailCatBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  detailCatText: {
+    fontSize: 11,
+    color: '#64748B',
   },
   detailDivider: {
-    width: '100%',
     height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 18,
-  },
-  detailPricesGrid: {
-    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
     width: '100%',
-    gap: 12,
+    marginVertical: 16,
   },
-  detailPriceItem: {
+  staffPriceBox: {
+    width: '100%',
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginBottom: 16,
+  },
+  staffPriceLabel: {
+    fontSize: 13,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  staffPriceValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#059669',
+    marginTop: 4,
+  },
+  pricesRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginBottom: 12,
+  },
+  priceBox: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    borderRadius: 14,
     padding: 14,
-    borderRadius: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  detailPriceLabel: {
+  sellBox: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  priceBoxLabel: {
     fontSize: 12,
     color: '#64748B',
     marginBottom: 4,
+    fontWeight: '500',
   },
-  detailBuyPrice: {
-    fontSize: 17,
+  priceBoxValue: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#0F172A',
-  },
-  detailSellPrice: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#10B981',
   },
   profitCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ECFDF5',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    marginTop: 14,
-    width: '100%',
     justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+  },
+  profitCardPositive: {
+    backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
+  profitCardNegative: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   profitText: {
     fontSize: 14,
-    color: '#065F46',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  profitHighlight: {
-    fontWeight: '800',
+  profitTextPositive: {
     color: '#047857',
   },
-  modalDismissButton: {
+  profitTextNegative: {
+    color: '#B91C1C',
+  },
+  adminActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginBottom: 12,
+  },
+  editActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  editActionText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+  deleteActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteActionText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#DC2626',
+  },
+  dismissBtn: {
+    width: '100%',
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  dismissBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     width: '100%',
-    backgroundColor: '#0F172A',
-    paddingVertical: 15,
-    borderRadius: 16,
+    marginBottom: 16,
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  editLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  editInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  saveEditBtn: {
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
     marginTop: 18,
   },
-  modalDismissButtonText: {
+  saveEditBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',

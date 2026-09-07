@@ -18,7 +18,7 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
-  const { store, logoutStore, products } = useStore();
+  const { store, role, logoutStore, products } = useStore();
   const [scannerVisible, setScannerVisible] = useState<boolean>(false);
 
   const handleLogout = () => {
@@ -36,9 +36,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setScannerVisible(false);
     const matched = products.find((p) => p.barcode === scannedCode);
     if (matched) {
+      const priceInfo =
+        role === 'staff'
+          ? `Satış Fiyatı: ${matched.sell_price.toFixed(2)} TL`
+          : `Satış Fiyatı: ${matched.sell_price.toFixed(2)} TL\nGeliş Fiyatı: ${matched.buy_price.toFixed(2)} TL`;
+
       Alert.alert(
         'Ürün Bulundu ✅',
-        `Ürün: ${matched.name}\nBarkod: ${matched.barcode}\nSatış Fiyatı: ${matched.sell_price.toFixed(2)} TL\nGeliş Fiyatı: ${matched.buy_price.toFixed(2)} TL`,
+        `Ürün: ${matched.name}\nBarkod: ${matched.barcode}\n${priceInfo}`,
         [
           { text: 'Kapat', style: 'cancel' },
           { text: 'Sorgula Ekranına Git', onPress: () => onNavigate('query') },
@@ -50,11 +55,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         `Barkod: ${scannedCode}\nBu barkoda ait kayıtlı ürün bulunamadı.`,
         [
           { text: 'Kapat', style: 'cancel' },
-          { text: 'Ürün Olarak Ekle', onPress: () => onNavigate('add') },
+          ...(role !== 'staff'
+            ? [{ text: 'Ürün Olarak Ekle', onPress: () => onNavigate('add') }]
+            : []),
         ]
       );
     }
   };
+
+  const handleAddProductPress = () => {
+    if (role === 'staff') {
+      Alert.alert(
+        'Yetki Kısıtlaması 🔒',
+        'Ürün ekleme ve düzenleme yetkisi yalnızca Yönetici ve Müdür rollerine aittir.'
+      );
+      return;
+    }
+    onNavigate('add');
+  };
+
+  const getRoleBadge = () => {
+    switch (role) {
+      case 'admin':
+        return { text: 'Yönetici', bg: '#FEF3C7', color: '#B45309', icon: 'shield-checkmark' as const };
+      case 'manager':
+        return { text: 'Müdür', bg: '#E0E7FF', color: '#4338CA', icon: 'briefcase' as const };
+      case 'staff':
+      default:
+        return { text: 'Kasiyer', bg: '#F1F5F9', color: '#475569', icon: 'person' as const };
+    }
+  };
+
+  const roleBadge = getRoleBadge();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -68,7 +100,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           </View>
           <View style={styles.storeTextContainer}>
             <Text style={styles.storeName} numberOfLines={1}>{store?.name || 'Mağazam'}</Text>
-            <Text style={styles.storeCode}>Kod: {store?.store_code}</Text>
+            <View style={styles.badgeRow}>
+              <Text style={styles.storeCode}>Kod: {store?.store_code}</Text>
+              <View style={[styles.roleTag, { backgroundColor: roleBadge.bg }]}>
+                <Ionicons name={roleBadge.icon} size={11} color={roleBadge.color} style={{ marginRight: 3 }} />
+                <Text style={[styles.roleTagText, { color: roleBadge.color }]}>{roleBadge.text}</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -97,56 +135,64 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       <View style={styles.content}>
         <Text style={styles.welcomeText}>Hoş Geldiniz 👋</Text>
         <Text style={styles.subtitleText}>
-          Toplam kayıtlı ürün: <Text style={styles.productCount}>{products.length}</Text>
+          Toplam aktif ürün: <Text style={styles.productCount}>{products.length}</Text>
         </Text>
 
-        <View style={styles.buttonGrid}>
-          {/* 1. SORGULA BUTONU */}
+        <View style={styles.actionsGrid}>
+          {/* SORGULA BUTONU */}
           <TouchableOpacity
-            style={[styles.mainButton, styles.queryButton]}
+            style={[styles.actionCard, styles.queryCard]}
             onPress={() => onNavigate('query')}
             activeOpacity={0.85}
           >
-            <View style={[styles.iconBox, styles.queryIconBox]}>
-              <Ionicons name="search" color="#2563EB" size={32} />
+            <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="search" size={32} color="#2563EB" />
             </View>
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.buttonTitle}>Sorgula</Text>
-              <Text style={styles.buttonDesc}>Ürün arayın veya detay inceleyin</Text>
+            <View style={styles.cardTexts}>
+              <Text style={[styles.cardTitle, { color: '#1D4ED8' }]}>Sorgula</Text>
+              <Text style={styles.cardDesc}>Fiyat, kâr ve barkod ara</Text>
             </View>
-            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
+            <Ionicons name="chevron-forward" size={20} color="#93C5FD" />
           </TouchableOpacity>
 
-          {/* 2. EKLE BUTONU */}
+          {/* EKLE BUTONU (Kasiyer rolünde kilit simgesi) */}
           <TouchableOpacity
-            style={[styles.mainButton, styles.addButton]}
-            onPress={() => onNavigate('add')}
+            style={[styles.actionCard, styles.addCard, role === 'staff' && styles.disabledCard]}
+            onPress={handleAddProductPress}
             activeOpacity={0.85}
           >
-            <View style={[styles.iconBox, styles.addIconBox]}>
-              <Ionicons name="add-circle" color="#059669" size={32} />
+            <View style={[styles.iconBox, { backgroundColor: role === 'staff' ? '#F1F5F9' : '#ECFDF5' }]}>
+              <Ionicons
+                name={role === 'staff' ? 'lock-closed' : 'add-circle'}
+                size={32}
+                color={role === 'staff' ? '#94A3B8' : '#059669'}
+              />
             </View>
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.buttonTitle}>Ekle</Text>
-              <Text style={styles.buttonDesc}>Yeni ürün ve barkod kaydedin</Text>
+            <View style={styles.cardTexts}>
+              <Text style={[styles.cardTitle, { color: role === 'staff' ? '#64748B' : '#047857' }]}>
+                {role === 'staff' ? 'Ürün Ekle (Kilitli)' : 'Ürün Ekle'}
+              </Text>
+              <Text style={styles.cardDesc}>
+                {role === 'staff' ? 'Yalnızca Müdür ve Yönetici' : 'Yeni ürün, fotoğraf ve barkod'}
+              </Text>
             </View>
-            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
+            <Ionicons name="chevron-forward" size={20} color={role === 'staff' ? '#CBD5E1' : '#6EE7B7'} />
           </TouchableOpacity>
 
-          {/* 3. HESAPLA BUTONU */}
+          {/* HESAPLA (KASA) BUTONU */}
           <TouchableOpacity
-            style={[styles.mainButton, styles.cashierButton]}
+            style={[styles.actionCard, styles.cashierCard]}
             onPress={() => onNavigate('cashier')}
             activeOpacity={0.85}
           >
-            <View style={[styles.iconBox, styles.cashierIconBox]}>
-              <Ionicons name="calculator" color="#D97706" size={32} />
+            <View style={[styles.iconBox, { backgroundColor: '#FFFBEB' }]}>
+              <Ionicons name="calculator" size={32} color="#D97706" />
             </View>
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.buttonTitle}>Hesapla</Text>
-              <Text style={styles.buttonDesc}>Hızlı kasa & satış ödemesi</Text>
+            <View style={styles.cardTexts}>
+              <Text style={[styles.cardTitle, { color: '#B45309' }]}>Hesapla (Kasa)</Text>
+              <Text style={styles.cardDesc}>Sepet, toplam tutar ve para üstü</Text>
             </View>
-            <Ionicons name="chevron-forward" color="#94A3B8" size={22} />
+            <Ionicons name="chevron-forward" size={20} color="#FCD34D" />
           </TouchableOpacity>
         </View>
       </View>
@@ -165,7 +211,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 0,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -175,21 +221,22 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F1F5F9',
   },
   storeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     flex: 1,
+    marginRight: 12,
   },
   storeBadge: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: '#D1FAE5',
+    borderRadius: 14,
+    backgroundColor: '#ECFDF5',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
   storeTextContainer: {
     flex: 1,
@@ -199,10 +246,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0F172A',
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 6,
+  },
   storeCode: {
     fontSize: 12,
     color: '#64748B',
-    marginTop: 2,
+    fontWeight: '500',
+  },
+  roleTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  roleTagText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   headerActions: {
     flexDirection: 'row',
@@ -223,7 +287,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -231,78 +295,71 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#0F172A',
   },
   subtitleText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#64748B',
     marginTop: 4,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   productCount: {
     fontWeight: 'bold',
     color: '#10B981',
   },
-  buttonGrid: {
-    gap: 18,
+  actionsGrid: {
+    gap: 16,
   },
-  mainButton: {
+  actionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-    gap: 16,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  queryButton: {
-    borderColor: '#BFDBFE',
+  queryCard: {
+    borderColor: '#DBEAFE',
   },
-  addButton: {
-    borderColor: '#A7F3D0',
+  addCard: {
+    borderColor: '#D1FAE5',
   },
-  cashierButton: {
-    borderColor: '#FDE68A',
+  cashierCard: {
+    borderColor: '#FEF3C7',
+  },
+  disabledCard: {
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
   },
   iconBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 16,
   },
-  queryIconBox: {
-    backgroundColor: '#EFF6FF',
-  },
-  addIconBox: {
-    backgroundColor: '#ECFDF5',
-  },
-  cashierIconBox: {
-    backgroundColor: '#FFFBEB',
-  },
-  buttonTextContainer: {
+  cardTexts: {
     flex: 1,
   },
-  buttonTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0F172A',
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 2,
   },
-  buttonDesc: {
+  cardDesc: {
     fontSize: 13,
     color: '#64748B',
-    marginTop: 3,
   },
 });
