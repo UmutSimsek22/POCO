@@ -8,8 +8,9 @@ interface StoreContextType {
   role: UserRole;
   products: Product[];
   isLoading: boolean;
-  loginStore: (storeCode: string, pinCode: string, roleCode?: string) => Promise<{ success: boolean; error?: string }>;
+  loginStore: (storeCode: string, pinCode: string, roleCode: string) => Promise<{ success: boolean; error?: string }>;
   createStore: (storeCode: string, pinCode: string, name: string) => Promise<{ success: boolean; store?: Store; error?: string }>;
+  updateStoreRoleCodes: (adminCode: string, managerCode: string, staffCode: string) => Promise<{ success: boolean; error?: string }>;
   logoutStore: () => Promise<void>;
   fetchProducts: () => Promise<void>;
   addProduct: (productData: Omit<Product, 'id' | 'store_id'>, imageUri?: string | null) => Promise<{ success: boolean; product?: Product; error?: string }>;
@@ -92,12 +93,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const loginStore = async (storeCode: string, pinCode: string, roleCode?: string) => {
+  const loginStore = async (storeCode: string, pinCode: string, roleCode: string) => {
     try {
       setIsLoading(true);
       const cleanCode = storeCode.trim().toUpperCase();
       const cleanPin = pinCode.trim();
-      const cleanRoleCode = roleCode?.trim().toUpperCase();
+      const cleanRoleCode = roleCode ? roleCode.trim().toUpperCase() : '';
+
+      // KODSUZ GİRİŞ YASAKLANDI (İstismarı engellemek için zorunlu)
+      if (!cleanRoleCode) {
+        return {
+          success: false,
+          error: 'Rol / Personel Kodu girmek zorunludur! Kodsuz giriş yapılamaz.',
+        };
+      }
 
       const { data, error } = await supabase
         .from('stores')
@@ -116,33 +125,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (activeStore.is_approved === false) {
         return {
           success: false,
-          error: 'Mağazanız henüz onaylanmamıştır. Lütfen sistem yöneticiniz ile iletişime geçiniz.',
+          error: 'Mağazanız henüz onaylanmamıştır! Lütfen sistem yöneticiniz ile iletişime geçiniz.',
         };
       }
 
-      // Rol tespiti
-      let determinedRole: UserRole = 'admin';
+      // Yaren Kırtasiye ve genel varsayılan kodlar
+      const isYaren = cleanCode === 'YAREN2005' || activeStore.name.toLowerCase().includes('yaren');
+      const adminKey = (activeStore.admin_code || (isYaren ? '0059' : 'ADMIN')).toUpperCase();
+      const managerKey = (activeStore.manager_code || (isYaren ? '2858' : 'MUDUR')).toUpperCase();
+      const staffKey = (activeStore.staff_code || (isYaren ? '2014' : 'KASA')).toUpperCase();
 
-      if (cleanRoleCode) {
-        const adminKey = (activeStore.admin_code || 'ADMIN').toUpperCase();
-        const managerKey = (activeStore.manager_code || 'MUDUR').toUpperCase();
-        const staffKey = (activeStore.staff_code || 'KASA').toUpperCase();
+      let determinedRole: UserRole;
 
-        if (cleanRoleCode === adminKey || cleanRoleCode === cleanPin) {
-          determinedRole = 'admin';
-        } else if (cleanRoleCode === managerKey) {
-          determinedRole = 'manager';
-        } else if (cleanRoleCode === staffKey) {
-          determinedRole = 'staff';
-        } else {
-          return {
-            success: false,
-            error: 'Geçersiz Personel / Rol Kodu! Lütfen yöneticinizden aldığınız kodu girin.',
-          };
-        }
-      } else {
-        // Rol kodu girilmediyse varsayılan olarak admin girişi
+      if (cleanRoleCode === adminKey) {
         determinedRole = 'admin';
+      } else if (cleanRoleCode === managerKey) {
+        determinedRole = 'manager';
+      } else if (cleanRoleCode === staffKey) {
+        determinedRole = 'staff';
+      } else {
+        return {
+          success: false,
+          error: 'Geçersiz Personel / Rol Kodu! Giriş yetkiniz bulunmuyor.',
+        };
       }
 
       setStore(activeStore);
@@ -179,7 +184,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         store_code: cleanCode,
         pin_code: cleanPin,
         name: cleanName,
-        is_approved: true, // v3 başlangıç onaylı (isteğe göre SQL'den false yapılabilir)
+        is_approved: false, // Yeni mağazalar yönetici onayına düşer
         admin_code: defaultAdminCode,
         manager_code: defaultManagerCode,
         staff_code: defaultStaffCode,
@@ -226,6 +231,53 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: false, error: e.message || 'Mağaza oluşturulurken hata oluştu.' };
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const updateStoreRoleCodes = async (
+    adminCode: string,
+    managerCode: string,
+    staffCode: string
+  ) => {
+    if (!store) return { success: false, error: 'Aktif mağaza bulunamadı!' };
+
+    try {
+      const cleanAdmin = adminCode.trim().toUpperCase();
+      const cleanManager = managerCode.trim().toUpperCase();
+      const cleanStaff = staffCode.trim().toUpperCase();
+
+      if (!cleanAdmin || !cleanManager || !cleanStaff) {
+        return { success: false, error: 'Tüm rol kodları dolu olmalıdır!' };
+      }
+
+      const payload = {
+        admin_code: cleanAdmin,
+        manager_code: cleanManager,
+        staff_code: cleanStaff,
+      };
+
+      const { data, error } = await supabase
+        .from('stores')
+        .update(payload)
+        .eq('id', store.id)
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const updatedStore: Store = {
+        ...store,
+        ...data,
+      };
+
+      setStore(updatedStore);
+      await AsyncStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(updatedStore));
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Kodlar güncellenirken bir hata oluştu.' };
     }
   };
 
@@ -492,6 +544,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isLoading,
         loginStore,
         createStore,
+        updateStoreRoleCodes,
         logoutStore,
         fetchProducts,
         addProduct,

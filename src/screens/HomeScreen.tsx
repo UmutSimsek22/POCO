@@ -8,6 +8,11 @@ import {
   StatusBar,
   Alert,
   Platform,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useStore } from '../context/StoreContext';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
@@ -18,8 +23,15 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
-  const { store, role, logoutStore, products } = useStore();
+  const { store, role, logoutStore, products, updateStoreRoleCodes } = useStore();
   const [scannerVisible, setScannerVisible] = useState<boolean>(false);
+
+  // Rol / Personel Kodları Modalı State'leri (Yalnızca Admin)
+  const [roleModalVisible, setRoleModalVisible] = useState<boolean>(false);
+  const [adminCodeInput, setAdminCodeInput] = useState<string>('');
+  const [managerCodeInput, setManagerCodeInput] = useState<string>('');
+  const [staffCodeInput, setStaffCodeInput] = useState<string>('');
+  const [isUpdatingCodes, setIsUpdatingCodes] = useState<boolean>(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -30,6 +42,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         { text: 'Çıkış Yap', style: 'destructive', onPress: logoutStore },
       ]
     );
+  };
+
+  const handleOpenRoleCodesModal = () => {
+    const isYaren = store?.store_code === 'YAREN2005' || store?.name.toLowerCase().includes('yaren');
+    setAdminCodeInput(store?.admin_code || (isYaren ? '0059' : 'ADMIN'));
+    setManagerCodeInput(store?.manager_code || (isYaren ? '2858' : 'MUDUR'));
+    setStaffCodeInput(store?.staff_code || (isYaren ? '2014' : 'KASA'));
+    setRoleModalVisible(true);
+  };
+
+  const handleSaveRoleCodes = async () => {
+    if (!adminCodeInput.trim() || !managerCodeInput.trim() || !staffCodeInput.trim()) {
+      Alert.alert('Eksik Bilgi ⚠️', 'Lütfen tüm rol kodlarını doldurunuz.');
+      return;
+    }
+
+    setIsUpdatingCodes(true);
+    const res = await updateStoreRoleCodes(
+      adminCodeInput.trim(),
+      managerCodeInput.trim(),
+      staffCodeInput.trim()
+    );
+    setIsUpdatingCodes(false);
+
+    if (res.success) {
+      Alert.alert(
+        'Kodlar Güncellendi! 🎉',
+        `Personel giriş kodlarınız başarıyla kaydedildi:\n\n👑 Yönetici: ${adminCodeInput.trim()}\n👔 Müdür: ${managerCodeInput.trim()}\n🛒 Kasiyer: ${staffCodeInput.trim()}`
+      );
+      setRoleModalVisible(false);
+    } else {
+      Alert.alert('Hata ⚠️', res.error || 'Kodlar güncellenirken bir hata oluştu.');
+    }
   };
 
   const handleQuickScan = (scannedCode: string) => {
@@ -92,7 +137,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Üst Mağaza Bilgisi & Hızlı Kamera & Çıkış */}
+      {/* Üst Mağaza Bilgisi & Eylemler */}
       <View style={styles.header}>
         <View style={styles.storeInfo}>
           <View style={styles.storeBadge}>
@@ -111,13 +156,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         </View>
 
         <View style={styles.headerActions}>
+          {/* PERSONEL KODLARI YÖNETİMİ BUTONU (Yalnızca Admin) */}
+          {role === 'admin' && (
+            <TouchableOpacity
+              style={styles.keyBtn}
+              onPress={handleOpenRoleCodesModal}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="key-outline" color="#2563EB" size={20} />
+            </TouchableOpacity>
+          )}
+
           {/* HIZLI KAMERA BUTONU */}
           <TouchableOpacity
             style={styles.cameraBtn}
             onPress={() => setScannerVisible(true)}
             activeOpacity={0.8}
           >
-            <Ionicons name="camera" color="#059669" size={22} />
+            <Ionicons name="camera" color="#059669" size={20} />
           </TouchableOpacity>
 
           {/* ÇIKIŞ BUTONU */}
@@ -126,7 +182,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             onPress={handleLogout}
             activeOpacity={0.8}
           >
-            <Ionicons name="log-out-outline" color="#EF4444" size={22} />
+            <Ionicons name="log-out-outline" color="#EF4444" size={20} />
           </TouchableOpacity>
         </View>
       </View>
@@ -196,6 +252,105 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* PERSONEL KODLARI YÖNETİMİ MODALI (Yönetici) */}
+      <Modal
+        visible={roleModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRoleModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.roleCodesCard}>
+              <View style={styles.roleCodesHeader}>
+                <View style={styles.roleHeaderIconCircle}>
+                  <Ionicons name="key" size={22} color="#2563EB" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.roleCodesTitle}>Personel Kodları Yönetimi</Text>
+                  <Text style={styles.roleCodesSubtitle}>
+                    {store?.name} ({store?.store_code})
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setRoleModalVisible(false)} style={styles.closeModalBtn}>
+                  <Ionicons name="close" size={22} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.roleCodesInfoText}>
+                Çalışanlarınıza yetkilerine göre aşağıdaki kodları tahsis edebilirsiniz. Kodsuz giriş yapılamaz.
+              </Text>
+
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+                {/* 👑 Yönetici Kodu */}
+                <View style={styles.roleInputGroup}>
+                  <View style={styles.roleLabelRow}>
+                    <Text style={[styles.roleInputLabel, { color: '#B45309' }]}>👑 Yönetici (Admin) Kodu</Text>
+                    <Text style={styles.roleDescBadge}>Tam Yetki</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.roleInput, { borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }]}
+                    value={adminCodeInput}
+                    onChangeText={setAdminCodeInput}
+                    placeholder="Örn: 0059"
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                {/* 👔 Müdür Kodu */}
+                <View style={styles.roleInputGroup}>
+                  <View style={styles.roleLabelRow}>
+                    <Text style={[styles.roleInputLabel, { color: '#4338CA' }]}>👔 Müdür Kodu</Text>
+                    <Text style={styles.roleDescBadge}>Maliyet & Düzenleme</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.roleInput, { borderColor: '#C7D2FE', backgroundColor: '#EEF2FF' }]}
+                    value={managerCodeInput}
+                    onChangeText={setManagerCodeInput}
+                    placeholder="Örn: 2858"
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                {/* 🛒 Kasiyer Kodu */}
+                <View style={styles.roleInputGroup}>
+                  <View style={styles.roleLabelRow}>
+                    <Text style={[styles.roleInputLabel, { color: '#047857' }]}>🛒 Kasiyer (Personel) Kodu</Text>
+                    <Text style={styles.roleDescBadge}>Sadece Satış & Arama</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.roleInput, { borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }]}
+                    value={staffCodeInput}
+                    onChangeText={setStaffCodeInput}
+                    placeholder="Örn: 2014"
+                    autoCapitalize="characters"
+                  />
+                </View>
+              </ScrollView>
+
+              <TouchableOpacity
+                style={[styles.saveCodesBtn, isUpdatingCodes && { opacity: 0.7 }]}
+                onPress={handleSaveRoleCodes}
+                disabled={isUpdatingCodes}
+                activeOpacity={0.85}
+              >
+                {isUpdatingCodes ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done" color="#FFFFFF" size={20} />
+                    <Text style={styles.saveCodesBtnText}>Kodları Kaydet & Güncelle</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Hızlı Barkod Okuma Modalı */}
       <BarcodeScannerModal
@@ -271,7 +426,17 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  keyBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   cameraBtn: {
     width: 44,
@@ -361,5 +526,108 @@ const styles = StyleSheet.create({
   cardDesc: {
     fontSize: 13,
     color: '#64748B',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  roleCodesCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  roleCodesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  roleHeaderIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleCodesTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  roleCodesSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    padding: 6,
+  },
+  roleCodesInfoText: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 10,
+  },
+  roleInputGroup: {
+    marginBottom: 14,
+  },
+  roleLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  roleInputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  roleDescBadge: {
+    fontSize: 10,
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  roleInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
+  saveCodesBtn: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 15,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  saveCodesBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

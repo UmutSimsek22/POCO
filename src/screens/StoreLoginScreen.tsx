@@ -45,7 +45,11 @@ export const StoreLoginScreen: React.FC = () => {
         );
       }
     } else {
-      const res = await loginStore(storeCode, pinCode, roleCode);
+      if (!roleCode.trim()) {
+        Alert.alert('Eksik Bilgi ⚠️', 'Lütfen Rol / Personel Kodunuzu girin. Kodsuz giriş yapılamaz.');
+        return;
+      }
+      const res = await loginStore(storeCode, pinCode, roleCode.trim());
       if (!res.success) {
         Alert.alert('Giriş Hatası ⚠️', res.error || 'Mağazaya giriş yapılamadı.');
       }
@@ -131,19 +135,19 @@ export const StoreLoginScreen: React.FC = () => {
           {!isCreating && (
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.label}>Personel / Rol Kodu</Text>
-                <Text style={styles.optionalBadge}>İsteğe Bağlı</Text>
+                <Text style={styles.label}>Personel / Rol Kodu *</Text>
+                <Text style={styles.requiredBadge}>Zorunlu</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Boş bırakırsanız Yönetici / Örn: KSA12"
+                placeholder="Örn: 0059, 2858 veya 2014"
                 placeholderTextColor="#9CA3AF"
                 value={roleCode}
                 onChangeText={setRoleCode}
                 autoCapitalize="characters"
               />
               <Text style={styles.helperText}>
-                Çalışanlar kendilerine verilen rol kodunu girerek giriş yapabilir.
+                Yönetici, Müdür veya Kasiyer kodunuzu girerek oturum açın.
               </Text>
             </View>
           )}
@@ -259,6 +263,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
     marginBottom: 6,
+  },
+  requiredBadge: {
+    fontSize: 11,
+    color: '#DC2626',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    fontWeight: '700',
   },
   optionalBadge: {
     fontSize: 11,
