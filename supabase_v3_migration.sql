@@ -11,43 +11,21 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('product-images', 'product-images', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Bucket için Herkese Açık Okuma (SELECT) Politikası
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' AND policyname = 'Public Access for Product Images'
-  ) THEN
-    CREATE POLICY "Public Access for Product Images"
-    ON storage.objects FOR SELECT
-    USING (bucket_id = 'product-images');
-  END IF;
-END $$;
+-- Bucket Güvenlik Politikaları (Eski politikalar varsa kaldırılır ve yenisi eklenir)
+DROP POLICY IF EXISTS "Public Access for Product Images" ON storage.objects;
+CREATE POLICY "Public Access for Product Images"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'product-images');
 
--- Bucket için Anonim/Yetkili Kullanıcı Yükleme (INSERT/UPDATE) Politikası
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' AND policyname = 'Allow Upload Product Images'
-  ) THEN
-    CREATE POLICY "Allow Upload Product Images"
-    ON storage.objects FOR INSERT
-    WITH CHECK (bucket_id = 'product-images');
-  END IF;
-END $$;
+DROP POLICY IF EXISTS "Allow Upload Product Images" ON storage.objects;
+CREATE POLICY "Allow Upload Product Images"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'product-images');
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' AND policyname = 'Allow Update Product Images'
-  ) THEN
-    CREATE POLICY "Allow Update Product Images"
-    ON storage.objects FOR UPDATE
-    USING (bucket_id = 'product-images');
-  END IF;
-END $$;
+DROP POLICY IF EXISTS "Allow Update Product Images" ON storage.objects;
+CREATE POLICY "Allow Update Product Images"
+ON storage.objects FOR UPDATE
+USING (bucket_id = 'product-images');
 
 -- 2. 'stores' Tablosuna v3 Rol ve Onay Sütunları
 ALTER TABLE public.stores 
