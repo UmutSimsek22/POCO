@@ -391,17 +391,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .select()
         .single();
 
-      // Eğer brand veya is_deleted henüz DB'de yoksa fallback ile dene
-      if (error && error.message?.includes('column')) {
-        delete payload.brand;
-        delete payload.is_deleted;
-        const retry = await supabase
-          .from('products')
-          .upsert([payload], { onConflict: 'store_id,barcode' })
-          .select()
-          .single();
-        data = retry.data;
-        error = retry.error;
+      // Eğer brand veya is_deleted henüz DB'de yoksa spesifik olarak çıkarıp tekrar dene
+      if (error && error.message) {
+        let retryNeeded = false;
+        if (error.message.includes('brand') && 'brand' in payload) {
+          delete payload.brand;
+          retryNeeded = true;
+        }
+        if (error.message.includes('is_deleted') && 'is_deleted' in payload) {
+          delete payload.is_deleted;
+          retryNeeded = true;
+        }
+        if (retryNeeded) {
+          const retry = await supabase
+            .from('products')
+            .upsert([payload], { onConflict: 'store_id,barcode' })
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
       }
 
       if (error) {
@@ -412,8 +421,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...data,
         buy_price: Number(data.buy_price) || 0,
         sell_price: Number(data.sell_price) || 0,
-        category: data.category || 'Genel',
-        brand: data.brand || null,
+        category: data.category || productData.category || 'Genel',
+        brand: data.brand !== undefined && data.brand !== null ? data.brand : (productData.brand?.trim() || null),
+        image_url: data.image_url || finalImageUrl || null,
       };
 
       // Yerel state güncelle
@@ -443,16 +453,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       let finalImageUrl: string | null | undefined = updates.image_url;
 
-      if (imageUri && !imageUri.startsWith('http')) {
+      if (imageUri === null) {
+        // Görsel kullanıcı tarafından kaldırıldı
+        finalImageUrl = null;
+      } else if (imageUri && !imageUri.startsWith('http')) {
+        // Yeni bir yerel görsel seçildi ve yüklenecek
         const uploadedUrl = await uploadProductImage(imageUri);
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         }
+      } else if (imageUri && imageUri.startsWith('http')) {
+        // Var olan uzak görsel korundu
+        finalImageUrl = imageUri;
       }
 
       const payload: any = {
         ...updates,
-        updated_at: new Date().toISOString(),
       };
 
       if (finalImageUrl !== undefined) {
@@ -471,18 +487,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .select()
         .single();
 
-      if (error && error.message?.includes('column')) {
-        delete payload.brand;
-        delete payload.is_deleted;
-        const retry = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', productId)
-          .eq('store_id', store.id)
-          .select()
-          .single();
-        data = retry.data;
-        error = retry.error;
+      // Yalnızca spesifik olarak eksik olan sütunu çıkarıp tekrar dene (brand'i gereksiz yere silme!)
+      if (error && error.message) {
+        let retryNeeded = false;
+        if (error.message.includes('brand') && 'brand' in payload) {
+          delete payload.brand;
+          retryNeeded = true;
+        }
+        if (error.message.includes('is_deleted') && 'is_deleted' in payload) {
+          delete payload.is_deleted;
+          retryNeeded = true;
+        }
+        if (retryNeeded) {
+          const retry = await supabase
+            .from('products')
+            .update(payload)
+            .eq('id', productId)
+            .eq('store_id', store.id)
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
       }
 
       if (error) {
@@ -493,6 +519,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...data,
         buy_price: Number(data.buy_price) || 0,
         sell_price: Number(data.sell_price) || 0,
+        category: data.category || updates.category || 'Genel',
+        brand: data.brand !== undefined && data.brand !== null ? data.brand : (updates.brand !== undefined ? updates.brand : null),
+        image_url: data.image_url !== undefined ? data.image_url : (finalImageUrl !== undefined ? finalImageUrl : null),
       };
 
       setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));

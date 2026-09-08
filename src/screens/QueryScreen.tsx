@@ -17,6 +17,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
@@ -42,6 +43,7 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
   const [editSellPrice, setEditSellPrice] = useState<string>('');
   const [editCategory, setEditCategory] = useState<string>('');
   const [editBrand, setEditBrand] = useState<string>('');
+  const [editImageUri, setEditImageUri] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   // Görsel yükleme hatası olan URL'leri takip et
@@ -97,7 +99,54 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
     setEditSellPrice(selectedProduct.sell_price.toString());
     setEditCategory(selectedProduct.category || 'Genel');
     setEditBrand(selectedProduct.brand || '');
+    setEditImageUri(selectedProduct.image_url || null);
     setEditModalVisible(true);
+  };
+
+  // Düzenlemede Fotoğraf Seç / Çek
+  const handlePickEditImage = async (useCamera: boolean) => {
+    try {
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Kamera İzni Gerekli 📷',
+            'Ürün fotoğrafı çekebilmek için kamera iznini onaylamanız gerekmektedir.'
+          );
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setEditImageUri(result.assets[0].uri);
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Galeri İzni Gerekli 🖼️',
+            'Galeriden fotoğraf seçebilmek için galeri iznini onaylamanız gerekmektedir.'
+          );
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setEditImageUri(result.assets[0].uri);
+        }
+      }
+    } catch (e: any) {
+      console.error('Görsel seçme hatası:', e);
+      Alert.alert('Fotoğraf Hatası', e?.message || 'Fotoğraf eklenirken bir sorun oluştu.');
+    }
   };
 
   // Düzenlemeyi Kaydet
@@ -109,14 +158,18 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
     }
 
     setIsUpdating(true);
-    const res = await updateProduct(selectedProduct.id, {
-      name: editName.trim(),
-      barcode: editBarcode.trim() || selectedProduct.barcode,
-      buy_price: Number(editBuyPrice) || 0,
-      sell_price: Number(editSellPrice),
-      category: editCategory.trim() || 'Genel',
-      brand: editBrand.trim() || null,
-    });
+    const res = await updateProduct(
+      selectedProduct.id,
+      {
+        name: editName.trim(),
+        barcode: editBarcode.trim() || selectedProduct.barcode,
+        buy_price: Number(editBuyPrice) || 0,
+        sell_price: Number(editSellPrice),
+        category: editCategory.trim() || 'Genel',
+        brand: editBrand.trim() || null,
+      },
+      editImageUri
+    );
     setIsUpdating(false);
 
     if (res.success && res.product) {
@@ -428,6 +481,46 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 10 }}>
+                {/* Fotoğraf Düzenleme / Ekleme Alanı */}
+                <View style={styles.editImageSection}>
+                  {editImageUri ? (
+                    <View style={styles.editImagePreviewWrapper}>
+                      <Image source={{ uri: editImageUri }} style={styles.editImagePreview} />
+                      <TouchableOpacity
+                        style={styles.editRemoveImageBtn}
+                        onPress={() => setEditImageUri(null)}
+                      >
+                        <Ionicons name="trash" color="#FFFFFF" size={16} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.editImagePlaceholder}>
+                      <Ionicons name="image-outline" size={36} color="#94A3B8" />
+                      <Text style={styles.editImagePlaceholderText}>Fotoğraf Yok (İsteğe Bağlı)</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.editImageButtonsRow}>
+                    <TouchableOpacity
+                      style={styles.editImageActionBtn}
+                      onPress={() => handlePickEditImage(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="camera" color="#059669" size={18} />
+                      <Text style={styles.editImageActionBtnText}>Fotoğraf Çek</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.editImageActionBtn, styles.editGalleryBtn]}
+                      onPress={() => handlePickEditImage(false)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="images" color="#2563EB" size={18} />
+                      <Text style={[styles.editImageActionBtnText, { color: '#2563EB' }]}>Galeriden Seç</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
                 <Text style={styles.editLabel}>Ürün Adı *</Text>
                 <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} />
 
@@ -962,6 +1055,79 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+  },
+  editImageSection: {
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  editImagePreviewWrapper: {
+    width: 110,
+    height: 110,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 10,
+    position: 'relative',
+    backgroundColor: '#F1F5F9',
+  },
+  editImagePreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  editRemoveImageBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editImagePlaceholder: {
+    width: 110,
+    height: 110,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+  },
+  editImagePlaceholderText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  editImageButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  editImageActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  editGalleryBtn: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  editImageActionBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
   },
   saveEditBtn: {
     backgroundColor: '#10B981',
