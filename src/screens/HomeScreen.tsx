@@ -19,7 +19,7 @@ import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { Ionicons } from '@expo/vector-icons';
 
 interface HomeScreenProps {
-  onNavigate: (screen: 'query' | 'add' | 'cashier') => void;
+  onNavigate: (screen: 'query' | 'add' | 'cashier', initialBarcode?: string) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
@@ -101,7 +101,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         [
           { text: 'Kapat', style: 'cancel' },
           ...(role !== 'staff'
-            ? [{ text: 'Ürün Olarak Ekle', onPress: () => onNavigate('add') }]
+            ? [{ text: 'Ürün Olarak Ekle', onPress: () => onNavigate('add', scannedCode) }]
             : []),
         ]
       );

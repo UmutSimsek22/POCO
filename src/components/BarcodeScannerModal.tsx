@@ -67,8 +67,45 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
+// EAN-13 ve EAN-8 Matematiksel Sağlama (Luhn Mod-10 Checksum) Kontrolleri
+const isValidEAN13 = (code: string): boolean => {
+  if (!/^\d{13}$/.test(code)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const digit = parseInt(code[i], 10);
+    sum += i % 2 === 0 ? digit : digit * 3;
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(code[12], 10);
+};
+
+const isValidEAN8 = (code: string): boolean => {
+  if (!/^\d{8}$/.test(code)) return false;
+  let sum = 0;
+  for (let i = 0; i < 7; i++) {
+    const digit = parseInt(code[i], 10);
+    sum += i % 2 === 0 ? digit * 3 : digit;
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(code[7], 10);
+};
+
   const handleBarcodeScanned = (result: BarcodeScanningResult) => {
     if (scanned) return;
+
+    const rawData = result.data?.trim();
+    if (!rawData) return;
+
+    // Hatalı/yarım okumaları anında eleyen matematiksel doğrulama
+    if (/^\d{13}$/.test(rawData)) {
+      if (!isValidEAN13(rawData)) {
+        return; // Hatalı veya eksik kare, bir sonraki net kareyi bekle
+      }
+    } else if (/^\d{8}$/.test(rawData)) {
+      if (!isValidEAN8(rawData)) {
+        return;
+      }
+    }
 
     // ROI Alan Kısıtlaması (Barkod sadece yeşil kılavuz alanındaysa okunur)
     if (cameraLayout && cameraLayout.width > 0 && cameraLayout.height > 0) {
@@ -111,7 +148,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     setScanned(true);
     playBeepSound();
-    onBarcodeScanned(result.data);
+    onBarcodeScanned(rawData);
   };
 
   const handleManualSubmit = () => {
@@ -179,8 +216,6 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   'ean13',
                   'ean8',
                   'upc_a',
-                  'upc_e',
-                  'code39',
                   'code128',
                   'qr',
                 ],

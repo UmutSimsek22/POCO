@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { Store, Product, UserRole } from '../types';
@@ -325,19 +326,41 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const uploadProductImage = async (uri: string): Promise<string | null> => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const filename = `${store?.id || 'default'}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+      let body: any;
+      let contentType = 'image/jpeg';
+
+      if (uri.startsWith('data:image')) {
+        const parts = uri.split(';base64,');
+        contentType = parts[0].replace('data:', '') || 'image/jpeg';
+        const base64Data = parts[1];
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        body = bytes.buffer;
+      } else {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        body = blob;
+      }
+
+      const fileExt = uri.endsWith('.png') ? 'png' : 'jpg';
+      const filename = `${store?.id || 'default'}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
         .from('product-images')
-        .upload(filename, blob, {
-          contentType: 'image/jpeg',
+        .upload(filename, body, {
+          contentType: contentType,
           upsert: true,
         });
 
       if (error) {
-        console.warn('Görsel yükleme uyarısı (product-images bucket oluşturulmamış olabilir):', error.message);
+        console.error('Supabase storage upload error:', error);
+        Alert.alert(
+          'Görsel Yükleme Uyarısı 📷',
+          `Ürün fotoğrafı depolama alanına yüklenemedi:\n\n${error.message}\n\n(Lütfen Supabase panelinde 'product-images' bucket'ının açık olduğundan emin olun).`
+        );
         return null;
       }
 
@@ -346,8 +369,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .getPublicUrl(filename);
 
       return publicUrlData.publicUrl;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Görsel işleme hatası:', e);
+      Alert.alert(
+        'Görsel İşleme Hatası 📷',
+        `Fotoğraf işlenirken hata oluştu: ${e?.message || 'Bilinmeyen hata'}`
+      );
       return null;
     }
   };
@@ -414,6 +441,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (error) {
+        if (error.code === '23505' || error.message?.includes('unique_store_barcode')) {
+          return { success: false, error: 'Bu barkod mağazanızda zaten kayıtlıdır! Lütfen farklı bir barkod giriniz.' };
+        }
         return { success: false, error: error.message };
       }
 
@@ -512,6 +542,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (error) {
+        if (error.code === '23505' || error.message?.includes('unique_store_barcode')) {
+          return {
+            success: false,
+            error: 'Bu barkod mağazanızda kayıtlı başka bir ürüne aittir! Lütfen farklı bir barkod giriniz.',
+          };
+        }
         return { success: false, error: error.message };
       }
 

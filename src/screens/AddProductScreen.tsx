@@ -35,6 +35,22 @@ const PRESET_CATEGORIES = [
   'Teknoloji',
 ];
 
+const PRESET_BRANDS = [
+  'Faber-Castell',
+  'Fatih',
+  'Adel',
+  'Bic',
+  'Stabilo',
+  'Rotring',
+  'Pritt',
+  'Gıpta',
+  'Mikro',
+  'Dolphin',
+  'Pensan',
+  'Serve',
+  'Südor',
+];
+
 export const AddProductScreen: React.FC<AddProductScreenProps> = ({
   onBack,
   initialBarcode = '',
@@ -67,6 +83,14 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
     ])
   ) as string[];
 
+  // Mevcut ürünlerden ve popüler markalardan benzersiz markaları topla
+  const existingBrands = Array.from(
+    new Set([
+      ...PRESET_BRANDS,
+      ...products.map((p) => p.brand).filter(Boolean) as string[],
+    ])
+  );
+
   const handlePickImage = async (useCamera: boolean) => {
     try {
       if (useCamera) {
@@ -83,6 +107,7 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
+          base64: true,
         });
         if (!result.canceled && result.assets && result.assets.length > 0) {
           setImageUri(result.assets[0].uri);
@@ -101,6 +126,7 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
+          base64: true,
         });
         if (!result.canceled && result.assets && result.assets.length > 0) {
           setImageUri(result.assets[0].uri);
@@ -297,8 +323,33 @@ export const AddProductScreen: React.FC<AddProductScreenProps> = ({
                 <Text style={styles.label}>Marka</Text>
                 <Text style={styles.optionalBadge}>Opsiyonel</Text>
               </View>
+
+              {/* Marka Etiketleri (Hızlı Seçim Çipleri) */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryPills}
+              >
+                {existingBrands.map((b) => {
+                  const isSelected = brand.toLowerCase() === b.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={b}
+                      style={[styles.catPill, isSelected && styles.catPillActive]}
+                      onPress={() => {
+                        setBrand(isSelected ? '' : b);
+                      }}
+                    >
+                      <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
+                        {b}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
               <TextInput
-                style={styles.input}
+                style={[styles.input, { marginTop: 8 }]}
                 placeholder="Örn: Fatih, Eti, Ülker, Faber-Castell"
                 placeholderTextColor="#94A3B8"
                 value={brand}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, ActivityIndicator, BackHandler } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,25 @@ const MainNavigator: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
   const [initialBarcode, setInitialBarcode] = useState<string>('');
 
+  const handleBackToHome = () => {
+    setInitialBarcode('');
+    setCurrentScreen('home');
+  };
+
+  // Android Sistem Geri Hareketi / Kaydırarak Geri Gelme Dinleyicisi
+  useEffect(() => {
+    const onBackPress = () => {
+      if (currentScreen !== 'home') {
+        handleBackToHome();
+        return true; // Varsayılan uygulamadan çıkış eylemini engelle ve ana sayfaya dön
+      }
+      return false; // Ana sayfadaysa sistemin normal çıkışına izin ver
+    };
+
+    const backSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSubscription.remove();
+  }, [currentScreen]);
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -36,11 +55,6 @@ const MainNavigator: React.FC = () => {
   const handleNavigateToAddWithBarcode = (barcode: string) => {
     setInitialBarcode(barcode);
     setCurrentScreen('add');
-  };
-
-  const handleBackToHome = () => {
-    setInitialBarcode('');
-    setCurrentScreen('home');
   };
 
   switch (currentScreen) {
@@ -62,7 +76,18 @@ const MainNavigator: React.FC = () => {
       );
     case 'home':
     default:
-      return <HomeScreen onNavigate={(screen) => setCurrentScreen(screen)} />;
+      return (
+        <HomeScreen
+          onNavigate={(screen, barcode) => {
+            if (barcode) {
+              setInitialBarcode(barcode);
+            } else {
+              setInitialBarcode('');
+            }
+            setCurrentScreen(screen);
+          }}
+        />
+      );
   }
 };
 

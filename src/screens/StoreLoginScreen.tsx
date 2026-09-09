@@ -140,7 +140,7 @@ export const StoreLoginScreen: React.FC = () => {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Örn: 0059, 2858 veya 2014"
+                placeholder="Rolünüze tanımlanan özel kod"
                 placeholderTextColor="#9CA3AF"
                 value={roleCode}
                 onChangeText={setRoleCode}

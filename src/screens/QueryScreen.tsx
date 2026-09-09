@@ -23,6 +23,22 @@ import { Product } from '../types';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { Ionicons } from '@expo/vector-icons';
 
+const PRESET_BRANDS = [
+  'Faber-Castell',
+  'Fatih',
+  'Adel',
+  'Bic',
+  'Stabilo',
+  'Rotring',
+  'Pritt',
+  'Gıpta',
+  'Mikro',
+  'Dolphin',
+  'Pensan',
+  'Serve',
+  'Südor',
+];
+
 interface QueryScreenProps {
   onBack: () => void;
 }
@@ -58,6 +74,17 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
       }
     });
     return Array.from(cats);
+  }, [products]);
+
+  // Mevcut markaları ve popüler markaları topla
+  const existingBrands = useMemo(() => {
+    const brandsSet = new Set<string>(PRESET_BRANDS);
+    products.forEach((p) => {
+      if (p.brand && p.brand.trim()) {
+        brandsSet.add(p.brand.trim());
+      }
+    });
+    return Array.from(brandsSet);
   }, [products]);
 
   // Arama ve Kategori Filtreleme
@@ -120,6 +147,7 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
+          base64: true,
         });
         if (!result.canceled && result.assets && result.assets.length > 0) {
           setEditImageUri(result.assets[0].uri);
@@ -138,6 +166,7 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.7,
+          base64: true,
         });
         if (!result.canceled && result.assets && result.assets.length > 0) {
           setEditImageUri(result.assets[0].uri);
@@ -157,12 +186,28 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
       return;
     }
 
+    const cleanBarcode = editBarcode.trim() || selectedProduct.barcode;
+
+    // Aynı mağazada başka bir üründe bu barkod var mı kontrol et (duplicate_store_barcode hatasını önle)
+    if (cleanBarcode.toLowerCase() !== selectedProduct.barcode.toLowerCase()) {
+      const duplicateProduct = products.find(
+        (p) => p.id !== selectedProduct.id && p.barcode.toLowerCase() === cleanBarcode.toLowerCase()
+      );
+      if (duplicateProduct) {
+        Alert.alert(
+          'Barkod Çakışması ⚠️',
+          `"${cleanBarcode}" barkodu zaten "${duplicateProduct.name}" ürününde kayıtlıdır!\n\nLütfen farklı bir barkod giriniz veya mevcut barkodu koruyunuz.`
+        );
+        return;
+      }
+    }
+
     setIsUpdating(true);
     const res = await updateProduct(
       selectedProduct.id,
       {
         name: editName.trim(),
-        barcode: editBarcode.trim() || selectedProduct.barcode,
+        barcode: cleanBarcode,
         buy_price: Number(editBuyPrice) || 0,
         sell_price: Number(editSellPrice),
         category: editCategory.trim() || 'Genel',
@@ -549,10 +594,54 @@ export const QueryScreen: React.FC<QueryScreenProps> = ({ onBack }) => {
                 </View>
 
                 <Text style={styles.editLabel}>Marka</Text>
-                <TextInput style={styles.editInput} value={editBrand} onChangeText={setEditBrand} placeholder="Marka adı..." />
+                {existingBrands.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.editChipsRow}
+                  >
+                    {existingBrands.map((b) => {
+                      const isSelected = editBrand.toLowerCase() === b.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={b}
+                          style={[styles.editChip, isSelected && styles.editChipActive]}
+                          onPress={() => setEditBrand(isSelected ? '' : b)}
+                        >
+                          <Text style={[styles.editChipText, isSelected && styles.editChipTextActive]}>
+                            {b}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                <TextInput style={[styles.editInput, { marginTop: 6 }]} value={editBrand} onChangeText={setEditBrand} placeholder="Marka adı..." />
 
                 <Text style={styles.editLabel}>Kategori</Text>
-                <TextInput style={styles.editInput} value={editCategory} onChangeText={setEditCategory} />
+                {categories.filter((c) => c !== 'Tümü').length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.editChipsRow}
+                  >
+                    {categories.filter((c) => c !== 'Tümü').map((c) => {
+                      const isSelected = editCategory.toLowerCase() === c.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.editChip, isSelected && styles.editChipActive]}
+                          onPress={() => setEditCategory(c)}
+                        >
+                          <Text style={[styles.editChipText, isSelected && styles.editChipTextActive]}>
+                            {c}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                <TextInput style={[styles.editInput, { marginTop: 6 }]} value={editCategory} onChangeText={setEditCategory} />
 
                 <TouchableOpacity
                   style={[styles.saveEditBtn, isUpdating && { opacity: 0.7 }]}
@@ -1128,6 +1217,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#059669',
+  },
+  editChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  editChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  editChipActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  editChipText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  editChipTextActive: {
+    color: '#059669',
+    fontWeight: '700',
   },
   saveEditBtn: {
     backgroundColor: '#10B981',
